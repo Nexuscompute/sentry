@@ -74,7 +74,7 @@ class IdentityManager(BaseManager):
         external_id: str,
         should_reattach: bool = True,
         defaults: Mapping[str, Any | None] = None,
-    ) -> None:
+    ) -> Identity:
         """
         Link the user with the identity. If `should_reattach` is passed, handle
         the case where the user is linked to a different identity or the
@@ -94,7 +94,8 @@ class IdentityManager(BaseManager):
         except IntegrityError as e:
             if not should_reattach:
                 raise e
-            self.reattach(idp, external_id, user, defaults)
+            return self.reattach(idp, external_id, user, defaults)
+        return identity
 
     def delete_identity(self, user: User, idp: IdentityProvider, external_id: str) -> None:
         self.filter(Q(external_id=external_id) | Q(user=user), idp=idp).delete()

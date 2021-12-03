@@ -114,7 +114,7 @@ class IntegrationPipeline(Pipeline):
             }
 
             try:
-                Identity.objects.link_identity(
+                identity_model = Identity.objects.link_identity(
                     user=self.request.user,
                     idp=idp,
                     external_id=identity["external_id"],
