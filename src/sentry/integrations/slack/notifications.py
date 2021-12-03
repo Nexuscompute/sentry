@@ -42,8 +42,11 @@ class SlackNotifyBasicMixin(NotifyBasicMixin):  # type: ignore
 def get_attachments(
     notification: OrganizationNotification,
     recipient: Team | User,
-    context: Mapping[str, Any],
+    shared_context: Mapping[str, Any],
+    extra_context_by_actor_id: Mapping[int, Mapping[str, Any]] | None,
 ) -> SlackBody:
+    extra_context = (extra_context_by_actor_id or {}).get(recipient.actor_id, {})
+    context = get_context(notification, recipient, shared_context, extra_context)
     klass = get_message_builder(notification.message_builder)
     attachments = klass(notification, context, recipient).build()
     if isinstance(attachments, dict):
@@ -52,7 +55,7 @@ def get_attachments(
 
 
 def get_context(
-    notification: OrganizationNotification,
+    notification: BaseNotification,
     recipient: Team | User,
     shared_context: Mapping[str, Any],
     extra_context: Mapping[str, Any],
@@ -67,12 +70,10 @@ def get_context(
 def get_channel_and_integration_by_user(
     user: User, organization: Organization
 ) -> Mapping[str, Integration]:
-
     identities = Identity.objects.filter(
         idp__type=EXTERNAL_PROVIDERS[ExternalProviders.SLACK],
         user=user.id,
     ).select_related("idp")
-
     if not identities:
         # The user may not have linked their identity so just move on
         # since there are likely other users or teams in the list of
@@ -142,6 +143,58 @@ def get_channel_and_token_by_recipient(
     return output
 
 
+def _notify_recipient(
+    notification: BaseNotification,
+    recipient: Team | User,
+    attachments: SlackBody,
+    channel: str,
+    token: str,
+    is_multiple: bool,
+) -> None:
+    # unfurl_links and unfurl_media are needed to preserve the intended message format
+    # and prevent the app from replying with help text to the unfurl
+    payload = {
+        "token": token,
+        "channel": channel,
+        "link_names": 1,
+        "unfurl_links": False,
+        "unfurl_media": False,
+        "text": notification.get_notification_title(),
+        "attachments": json.dumps(attachments),
+    }
+    log_params = {
+        "notification": notification,
+        "recipient": recipient.id,
+        "channel_id": channel,
+        "is_multiple": is_multiple,
+    }
+    post_message.apply_async(
+        kwargs={
+            "payload": payload,
+            "log_error_message": "notification.fail.slack_post",
+            "log_params": log_params,
+        }
+    )
+    notification.record_notification_sent(recipient, ExternalProviders.SLACK)
+
+
+def check_if_is_multiple(
+    notification: BaseNotification,
+    recipient: Team | User,
+    tokens_by_channel: Mapping[str, str],
+) -> bool:
+    is_multiple = len(tokens_by_channel.keys()) > 1
+    if is_multiple:
+        logger.info(
+            "notification.multiple.slack_post",
+            extra={
+                "notification": notification,
+                "recipient": recipient.id,
+            },
+        )
+    return is_multiple
+
+
 @register_notification_provider(ExternalProviders.SLACK)
 def send_notification_as_slack(
     notification: BaseNotification,
@@ -154,52 +207,22 @@ def send_notification_as_slack(
         # TODO(mgaeta): We cannot determine the Slack workspace without an organization.
         return
 
-    data = get_channel_and_token_by_recipient(notification.organization, recipients)
-
-    for recipient, tokens_by_channel in data.items():
-        is_multiple = True if len([token for token in tokens_by_channel]) > 1 else False
-        if is_multiple:
-            logger.info(
-                "notification.multiple.slack_post",
-                extra={
-                    "notification": notification,
-                    "recipient": recipient.id,
-                },
-            )
-        extra_context = (extra_context_by_actor_id or {}).get(recipient.actor_id, {})
-        context = get_context(notification, recipient, shared_context, extra_context)
-        attachments = get_attachments(notification, recipient, context)
-
+    for recipient, tokens_by_channel in get_channel_and_token_by_recipient(
+        organization=notification.organization,
+        recipients=recipients,
+    ).items():
+        is_multiple = check_if_is_multiple(notification, recipient, tokens_by_channel)
+        attachments = get_attachments(
+            notification,
+            recipient,
+            shared_context,
+            extra_context_by_actor_id,
+        )
         for channel, token in tokens_by_channel.items():
-            # unfurl_links and unfurl_media are needed to preserve the intended message format
-            # and prevent the app from replying with help text to the unfurl
-            payload = {
-                "token": token,
-                "channel": channel,
-                "link_names": 1,
-                "unfurl_links": False,
-                "unfurl_media": False,
-                "text": notification.get_notification_title(),
-                "attachments": json.dumps(attachments),
-            }
-            log_params = {
-                "notification": notification,
-                "recipient": recipient.id,
-                "channel_id": channel,
-                "is_multiple": is_multiple,
-            }
-            post_message.apply_async(
-                kwargs={
-                    "payload": payload,
-                    "log_error_message": "notification.fail.slack_post",
-                    "log_params": log_params,
-                }
-            )
-            notification.record_notification_sent(recipient, ExternalProviders.SLACK)
+            _notify_recipient(notification, recipient, attachments, channel, token, is_multiple)
 
-    key = notification.metrics_key
     metrics.incr(
-        f"{key}.notifications.sent",
-        instance=f"slack.{key}.notification",
+        f"{notification.metrics_key}.notifications.sent",
+        instance=f"slack.{notification.metrics_key}.notification",
         skip_internal=False,
     )

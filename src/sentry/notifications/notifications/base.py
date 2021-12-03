@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class BaseNotification(abc.ABC):
+    message_builder = "SlackNotificationsMessageBuilder"
+
     @property
     def category(self) -> str:
         raise NotImplementedError
@@ -31,6 +33,12 @@ class BaseNotification(abc.ABC):
 
     def get_log_params(self, recipient: Team | User) -> Mapping[str, Any]:
         return {"actor_id": recipient.actor_id}
+
+    def get_message_actions(self) -> Sequence[MessageAction]:
+        raise NotImplementedError
+
+    def get_notification_title(self) -> str:
+        raise NotImplementedError
 
     def get_recipient_context(
         self, recipient: Team | User, extra_context: Mapping[str, Any]
@@ -67,7 +75,6 @@ class BaseNotification(abc.ABC):
 
 
 class OrganizationNotification(BaseNotification, abc.ABC):
-    message_builder = "SlackNotificationsMessageBuilder"
     fine_tuning_key: str | None = None
     metrics_key: str = ""
 
