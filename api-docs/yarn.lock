@@ -369,10 +369,10 @@ js-yaml@^4.1.0:
   dependencies:
     argparse "^2.0.1"
 
-json-diff@^0.7.1:
-  version "0.7.2"
-  resolved "https://registry.yarnpkg.com/json-diff/-/json-diff-0.7.2.tgz#237ade7cdfb882183b79f2066defdb458b995bba"
-  integrity sha512-m+rr5cvC8gML9iB8FatQpQ/NEBJ7LHUFMM4KoNfmCfhTElm42SnqslCGKpYB+Dt1NgkibRVrGP0ZAO3TOU1hpA==
+json-diff@^0.7.3:
+  version "0.7.3"
+  resolved "https://registry.yarnpkg.com/json-diff/-/json-diff-0.7.3.tgz#c5b9f23d63161cc08b4610ed6ad21ee23f986762"
+  integrity sha512-VBvNBt3cIrCBHa3gYbVsCFUEReqWZPf+Biq1ZtFdIiQ6rytRLDp3qvtrGv7z/iZDd1D4vXWpW7Nx1nP8muLzkg==
   dependencies:
     cli-color "^2.0.0"
     difflib "~0.2.1"
