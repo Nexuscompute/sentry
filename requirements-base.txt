@@ -64,7 +64,7 @@ structlog==21.1.0
 symbolic==8.7.1
 toronado==0.1.0
 typing-extensions==3.10.0.2
-ua-parser==0.10.0
+ua-parser==0.15.0
 unidiff==0.7.1
 urllib3[brotli]==1.25.11
 brotlipy==0.7.0
