@@ -26,7 +26,7 @@ google-cloud-storage==1.35.0
 # https://github.com/googleapis/python-crc32c/issues/83
 google-crc32c==1.1.2
 jsonschema==3.2.0
-lxml==4.6.5
+lxml==4.9.1
 maxminddb==2.0.3
 mistune==2.0.2
 mmh3==3.0.0
