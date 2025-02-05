@@ -4,8 +4,6 @@ from sentry.conf.server import *
 
 import os.path
 
-CONF_ROOT = os.path.dirname(__file__)
-
 DATABASES = {
     'default': {
         'ENGINE': 'sentry.db.postgres',
@@ -42,15 +40,13 @@ DEBUG = %(debug_flag)s
 # Sentry currently utilizes two separate mechanisms. While CACHES is not a
 # requirement, it will optimize several high throughput patterns.
 
-# If you wish to use memcached, install the dependencies and adjust the config
-# as shown:
-#
-#   pip install python-memcached
+# If you wish to use memcached, uncomment the following:
 #
 # CACHES = {
 #     'default': {
-#         'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+#         'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
 #         'LOCATION': ['127.0.0.1:11211'],
+#         'OPTIONS': {'ignore_exc': True},
 #     }
 # }
 

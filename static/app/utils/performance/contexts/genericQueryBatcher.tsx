@@ -1,18 +1,23 @@
-import {createContext, Fragment, Ref, useEffect, useRef} from 'react';
+import type {Ref} from 'react';
+import {createContext, Fragment, useEffect, useRef} from 'react';
+import identity from 'lodash/identity';
 
-import {Client} from 'sentry/api';
-import {Organization} from 'sentry/types';
-import trackAdvancedAnalyticsEvent from 'sentry/utils/analytics/trackAdvancedAnalyticsEvent';
+import type {Client} from 'sentry/api';
+import type {Organization} from 'sentry/types/organization';
+import {trackAnalytics} from 'sentry/utils/analytics';
 import useApi from 'sentry/utils/useApi';
 import useOrganization from 'sentry/utils/useOrganization';
 
 import {createDefinedContext} from './utils';
 
 type QueryObject = {
+  includeAllArgs: boolean | undefined;
   query: {
     [k: string]: any;
   };
 }; // TODO(k-fish): Fix to ensure exact types for all requests. Simplified type for now, need to pull this in from events file.
+
+export type Transform = (data: any, queryDefinition: BatchQueryDefinition) => any;
 
 type BatchQueryDefinition = {
   api: Client;
@@ -23,6 +28,7 @@ type BatchQueryDefinition = {
   requestQueryObject: QueryObject;
   // Intermediate promise functions
   resolve: (value: any) => void;
+  transform?: Transform;
 };
 
 type QueryBatch = {
@@ -48,10 +54,12 @@ function queriesToMap(collectedQueries: Record<symbol, BatchQueryDefinition>) {
   }
   const mergeMap: MergeMap = {};
 
-  keys.forEach(async key => {
+  keys.forEach(key => {
+    // @ts-expect-error TS(7053): Element implicitly has an 'any' type because expre... Remove this comment to see the full error message
     const query = collectedQueries[key];
     mergeMap[mergeKey(query)] = mergeMap[mergeKey(query)] || [];
-    mergeMap[mergeKey(query)].push(query);
+    mergeMap[mergeKey(query)]!.push(query);
+    // @ts-expect-error TS(7053): Element implicitly has an 'any' type because expre... Remove this comment to see the full error message
     delete collectedQueries[key];
   });
 
@@ -73,14 +81,14 @@ function _handleUnmergeableQuery(queryDefinition: BatchQueryDefinition) {
 
 function _handleUnmergeableQueries(mergeMap: MergeMap) {
   let queriesSent = 0;
-  Object.keys(mergeMap).forEach(async k => {
+  Object.keys(mergeMap).forEach(k => {
     // Using async forEach to ensure calls start in parallel.
-    const mergeList = mergeMap[k];
+    const mergeList = mergeMap[k]!;
 
     if (mergeList.length === 1) {
       const [queryDefinition] = mergeList;
       queriesSent++;
-      _handleUnmergeableQuery(queryDefinition);
+      _handleUnmergeableQuery(queryDefinition!);
     }
   });
 
@@ -90,16 +98,16 @@ function _handleUnmergeableQueries(mergeMap: MergeMap) {
 function _handleMergeableQueries(mergeMap: MergeMap) {
   let queriesSent = 0;
   Object.keys(mergeMap).forEach(async k => {
-    const mergeList = mergeMap[k];
+    const mergeList = mergeMap[k]!;
 
     if (mergeList.length <= 1) {
       return;
     }
 
     const [exampleDefinition] = mergeList;
-    const batchProperty = exampleDefinition.batchProperty;
-    const query = {...exampleDefinition.requestQueryObject.query};
-    const requestQueryObject = {...exampleDefinition.requestQueryObject, query};
+    const batchProperty = exampleDefinition!.batchProperty;
+    const query = {...exampleDefinition!.requestQueryObject.query};
+    const requestQueryObject = {...exampleDefinition!.requestQueryObject, query};
 
     const batchValues: string[] = [];
 
@@ -123,8 +131,8 @@ function _handleMergeableQueries(mergeMap: MergeMap) {
 
     queriesSent++;
     const requestPromise = requestFunction(
-      exampleDefinition.api,
-      exampleDefinition.path,
+      exampleDefinition!.api,
+      exampleDefinition!.path,
       requestQueryObject
     );
 
@@ -132,14 +140,9 @@ function _handleMergeableQueries(mergeMap: MergeMap) {
       const result = await requestPromise;
       // Unmerge back into individual results
       mergeList.forEach(queryDefinition => {
-        const propertyName = Array.isArray(
-          queryDefinition.requestQueryObject.query[queryDefinition.batchProperty]
-        )
-          ? queryDefinition.requestQueryObject.query[queryDefinition.batchProperty][0]
-          : queryDefinition.requestQueryObject.query[queryDefinition.batchProperty];
-
-        const singleResult = result[propertyName];
-        queryDefinition.resolve(singleResult);
+        queryDefinition.resolve(
+          (queryDefinition.transform || identity)(result, queryDefinition)
+        );
       });
     } catch (e) {
       // On error fail all requests relying on this merged query (for now)
@@ -170,7 +173,7 @@ function handleBatching(
 
   const queriesSaved = queriesCollected - queriesSent;
 
-  trackAdvancedAnalyticsEvent('performance_views.landingv3.batch_queries', {
+  trackAnalytics('performance_views.landingv3.batch_queries', {
     organization,
     num_collected: queriesCollected,
     num_saved: queriesSaved,
@@ -178,7 +181,7 @@ function handleBatching(
   });
 }
 
-export const GenericQueryBatcher = ({children}: {children: React.ReactNode}) => {
+export function GenericQueryBatcher({children}: {children: React.ReactNode}) {
   const queries = useRef<Record<symbol, BatchQueryDefinition>>({});
 
   const timeoutRef = useRef<number | undefined>(undefined);
@@ -196,12 +199,14 @@ export const GenericQueryBatcher = ({children}: {children: React.ReactNode}) => 
   };
 
   // Cleanup timeout after component unmounts.
-  useEffect(
-    () => () => {
-      timeoutRef.current && window.clearTimeout(timeoutRef.current);
-    },
-    []
-  );
+  useEffect(() => {
+    const cleanup = () => {
+      if (timeoutRef.current) {
+        window.clearTimeout(timeoutRef.current);
+      }
+    };
+    return cleanup;
+  }, []);
 
   return (
     <GenericQueryBatcherProvider
@@ -212,11 +217,11 @@ export const GenericQueryBatcher = ({children}: {children: React.ReactNode}) => 
       {children}
     </GenericQueryBatcherProvider>
   );
-};
+}
 
 type NodeContext = {
   batchProperty: string;
-  id: Ref<Symbol>;
+  id: Ref<symbol>;
 };
 
 const BatchNodeContext = createContext<NodeContext | undefined>(undefined);
@@ -230,9 +235,10 @@ export type QueryBatching = {
 export function QueryBatchNode(props: {
   batchProperty: string;
   children(_: any): React.ReactNode;
+  transform?: Transform;
 }) {
   const api = useApi();
-  const {batchProperty, children} = props;
+  const {batchProperty, children, transform} = props;
   const id = useRef(Symbol());
 
   let batchContext: QueryBatch;
@@ -251,6 +257,7 @@ export function QueryBatchNode(props: {
       const queryDefinition: BatchQueryDefinition = {
         resolve,
         reject,
+        transform,
         batchProperty,
         path,
         requestQueryObject,

@@ -3,9 +3,8 @@ import styled from '@emotion/styled';
 import OrganizationAvatar from 'sentry/components/avatar/organizationAvatar';
 import {IconWarning} from 'sentry/icons';
 import {tn} from 'sentry/locale';
-import overflowEllipsis from 'sentry/styles/overflowEllipsis';
-import space from 'sentry/styles/space';
-import {OrganizationSummary} from 'sentry/types';
+import {space} from 'sentry/styles/space';
+import type {OrganizationSummary} from 'sentry/types/organization';
 
 type Props = {
   organization: OrganizationSummary;
@@ -19,7 +18,9 @@ type Props = {
 const SidebarOrgSummary = styled(({organization, projectCount, ...props}: Props) => (
   <div {...props}>
     {organization.status.id === 'pending_deletion' ? (
-      <PendingDeletionAvatar data-test-id="pending-deletion-icon" />
+      <PendingDeletionAvatar data-test-id="pending-deletion-icon">
+        <IconWarning size="sm" color="gray200" />
+      </PendingDeletionAvatar>
     ) : (
       <OrganizationAvatar organization={organization} size={36} />
     )}
@@ -44,8 +45,8 @@ const Name = styled('div')<{pendingDeletion: boolean}>`
   color: ${p => (p.pendingDeletion ? p.theme.subText : p.theme.textColor)};
   font-size: ${p => p.theme.fontSizeLarge};
   line-height: 1.1;
-  font-weight: bold;
-  ${overflowEllipsis};
+  font-weight: ${p => p.theme.fontWeightBold};
+  ${p => p.theme.overflowEllipsis};
 `;
 
 const ProjectCount = styled('div')`
@@ -53,7 +54,7 @@ const ProjectCount = styled('div')`
   font-size: ${p => p.theme.fontSizeMedium};
   line-height: 1;
   margin-top: ${space(0.5)};
-  ${overflowEllipsis};
+  ${p => p.theme.overflowEllipsis};
 `;
 
 const PendingDeletionAvatar = styled('div')`
@@ -65,9 +66,5 @@ const PendingDeletionAvatar = styled('div')`
   border: 2px dashed ${p => p.theme.gray200};
   border-radius: 4px;
 `;
-
-PendingDeletionAvatar.defaultProps = {
-  children: <IconWarning size="sm" color="gray200" />,
-};
 
 export default SidebarOrgSummary;
