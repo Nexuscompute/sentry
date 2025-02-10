@@ -2,20 +2,24 @@ import styled from '@emotion/styled';
 
 import {StyledForm} from 'sentry/components/deprecatedforms/form';
 import SelectField from 'sentry/components/deprecatedforms/selectField';
-import SelectControl from 'sentry/components/forms/selectControl';
-import {SelectValue} from 'sentry/types';
+import SelectControl from 'sentry/components/forms/controls/selectControl';
+import type {SelectValue} from 'sentry/types/core';
 import {defined} from 'sentry/utils';
 import convertFromSelect2Choices from 'sentry/utils/convertFromSelect2Choices';
 
+// XXX: This is ONLY used in GenericField. If we can delete that this can go.
+
 /**
+ * @deprecated Do not use this
+ *
  * This is a <SelectField> that allows the user to create new options if one does't exist.
  *
  * This is used in some integrations
  */
 export default class SelectCreatableField extends SelectField {
-  options: SelectValue<any>[] | undefined;
+  options: Array<SelectValue<any>> | undefined;
 
-  constructor(props, context) {
+  constructor(props: any, context: any) {
     super(props, context);
 
     // We only want to parse options once because react-select relies
@@ -25,14 +29,14 @@ export default class SelectCreatableField extends SelectField {
     this.options = this.getOptions(props);
   }
 
-  UNSAFE_componentWillReceiveProps(nextProps, nextContext) {
+  UNSAFE_componentWillReceiveProps(nextProps: any, nextContext: any) {
     const newError = this.getError(nextProps, nextContext);
     if (newError !== this.state.error) {
       this.setState({error: newError});
     }
     if (this.props.value !== nextProps.value || defined(nextContext.form)) {
       const newValue = this.getValue(nextProps, nextContext);
-      // This is the only thing that is different from parent, we compare newValue against coerved value in state
+      // This is the only thing that is different from parent, we compare newValue against coerced value in state
       // To remain compatible with react-select, we need to store the option object that
       // includes `value` and `label`, but when we submit the format, we need to coerce it
       // to just return `value`. Also when field changes, it propagates the coerced value up
@@ -53,7 +57,7 @@ export default class SelectCreatableField extends SelectField {
     }
   }
 
-  getOptions(props) {
+  getOptions(props: any) {
     return convertFromSelect2Choices(props.choices) || props.options;
   }
 

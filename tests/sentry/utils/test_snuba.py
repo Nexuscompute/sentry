@@ -3,29 +3,38 @@ from datetime import datetime, timedelta
 from unittest import mock
 
 import pytest
-import pytz
 from django.utils import timezone
+from snuba_sdk import And, Column, Condition, Function, Op, Or
+from urllib3 import HTTPConnectionPool
+from urllib3.exceptions import HTTPError, ReadTimeoutError
 
-from sentry.models import GroupRelease, Project, Release
-from sentry.testutils import TestCase
+from sentry.models.grouprelease import GroupRelease
+from sentry.models.project import Project
+from sentry.models.release import Release
+from sentry.snuba.dataset import Dataset
+from sentry.testutils.cases import TestCase
 from sentry.utils.snuba import (
-    Dataset,
+    ROUND_UP,
+    RetrySkipTimeout,
     SnubaQueryParams,
     UnqualifiedQueryError,
+    _has_tags_filter,
     _prepare_query_params,
+    _substitute_tags_filter,
     get_json_type,
     get_query_params_to_update_for_projects,
     get_snuba_column_name,
     get_snuba_translators,
+    has_tags_filter,
     quantize_time,
+    substitute_conditions,
+    substitute_tags_filter,
 )
 
 
 class SnubaUtilsTest(TestCase):
     def setUp(self):
-        self.now = datetime.utcnow().replace(
-            hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC
-        )
+        self.now = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
         self.proj1 = self.create_project()
         self.proj1env1 = self.create_environment(project=self.proj1, name="prod")
         self.proj1group1 = self.create_group(self.proj1)
@@ -50,7 +59,7 @@ class SnubaUtilsTest(TestCase):
             project_id=self.proj1.id, group_id=self.proj1group2.id, release_id=self.release1.id
         )
 
-    def test_translation(self):
+    def test_translation_no_translation(self):
         # Case 1: No translation
         filter_keys = {"sdk": ["python", "js"]}
         forward, reverse = get_snuba_translators(filter_keys)
@@ -58,6 +67,7 @@ class SnubaUtilsTest(TestCase):
         result = [{"sdk": "python", "count": 123}, {"sdk": "js", "count": 234}]
         assert all(reverse(row) == row for row in result)
 
+    def test_translation_environment_id_to_name_and_back(self):
         # Case 2: Environment ID -> Name and back
         filter_keys = {"environment": [self.proj1env1.id]}
         forward, reverse = get_snuba_translators(filter_keys)
@@ -65,6 +75,7 @@ class SnubaUtilsTest(TestCase):
         row = {"environment": self.proj1env1.name, "count": 123}
         assert reverse(row) == {"environment": self.proj1env1.id, "count": 123}
 
+    def test_translation_both_environment_and_release(self):
         # Case 3, both Environment and Release
         filter_keys = {
             "environment": [self.proj1env1.id],
@@ -86,6 +97,7 @@ class SnubaUtilsTest(TestCase):
             "count": 123,
         }
 
+    def test_translation_two_groups_many_to_many_of_groups(self):
         # Case 4: 2 Groups, many-to-many mapping of Groups
         # to Releases. Reverse translation depends on multiple
         # fields.
@@ -300,6 +312,36 @@ class QuantizeTimeTest(unittest.TestCase):
     def setUp(self):
         self.now = timezone.now().replace(microsecond=0)
 
+    def test_quantizes_with_duration(self):
+        key_hash = 0
+        time = datetime(2023, 12, 27, 4, 4, 24)
+
+        assert quantize_time(time, key_hash, 60) == datetime(2023, 12, 27, 4, 4, 0)
+        assert quantize_time(time, key_hash, 120) == datetime(2023, 12, 27, 4, 4, 0)
+        assert quantize_time(time, key_hash, 900) == datetime(2023, 12, 27, 4, 0, 0)
+
+    def test_quantizes_with_key_hash(self):
+        key_hash = 12
+        time = datetime(2023, 12, 27, 4, 4, 24)
+
+        assert quantize_time(time, key_hash, 60) == datetime(2023, 12, 27, 4, 4, 12)
+        assert quantize_time(time, key_hash, 900) == datetime(2023, 12, 27, 4, 0, 12)
+
+    def test_quantizes_if_already_quantized(self):
+        key_hash = 1
+        duration = 10
+        time = datetime(2023, 12, 27, 21, 22, 41)
+
+        assert quantize_time(time, key_hash, duration) == datetime(2023, 12, 27, 21, 22, 31)
+
+    def test_quantizes_with_rounding_up(self):
+        assert quantize_time(datetime(2023, 12, 27, 4, 4, 0), 0, 60, ROUND_UP) == datetime(
+            2023, 12, 27, 4, 4, 0
+        )
+        assert quantize_time(datetime(2023, 12, 27, 4, 4, 24), 0, 60, ROUND_UP) == datetime(
+            2023, 12, 27, 4, 5, 0
+        )
+
     def test_cache_suffix_time(self):
         starting_key = quantize_time(self.now, 0)
         finishing_key = quantize_time(self.now + timedelta(seconds=300), 0)
@@ -374,3 +416,110 @@ class QuantizeTimeTest(unittest.TestCase):
                 break
 
         assert i != j
+
+
+class FakeConnectionPool(HTTPConnectionPool):
+    def __init__(self, connection, **kwargs):
+        self.connection = connection
+        super().__init__(**kwargs)
+
+    def _new_conn(self):
+        return self.connection
+
+
+def test_retries():
+    """
+    Tests that, even if I set up 5 retries, there is only one request
+    made since it times out.
+    """
+    connection_mock = mock.Mock()
+
+    snuba_pool = FakeConnectionPool(
+        connection=connection_mock,
+        host="www.test.com",
+        port=80,
+        retries=RetrySkipTimeout(total=5, allowed_methods={"GET", "POST"}),
+        timeout=30,
+        maxsize=10,
+    )
+
+    connection_mock.request.side_effect = ReadTimeoutError(snuba_pool, "test.com", "Timeout")
+
+    with pytest.raises(HTTPError):
+        snuba_pool.urlopen("POST", "/query", body="{}")
+
+    assert connection_mock.request.call_count == 1
+
+
+def test_substitute_conditions():
+    tags = Condition(lhs=Column(name="tags[hello]", entity=None), op=Op.EQ, rhs=True)
+    not_tags = Condition(lhs=Column(name="not_tags", entity=None), op=Op.EQ, rhs=True)
+
+    result = list(substitute_conditions(conditions=[tags, not_tags]))
+    assert result == [Or(conditions=[tags, substitute_tags_filter(tags)]), not_tags]
+
+
+def test_has_tags_filter():
+    tags = Condition(lhs=Column(name="tags[hello]", entity=None), op=Op.EQ, rhs=True)
+    not_tags = Condition(lhs=Column(name="not_tags", entity=None), op=Op.EQ, rhs=True)
+
+    assert has_tags_filter(tags) is True
+    assert has_tags_filter(not_tags) is False
+    assert has_tags_filter(And(conditions=[tags, not_tags])) is True
+    assert has_tags_filter(And(conditions=[not_tags, not_tags])) is False
+    assert has_tags_filter(Or(conditions=[tags, not_tags])) is True
+    assert has_tags_filter(Or(conditions=[not_tags, not_tags])) is False
+
+
+def test__has_tags_filter():
+    """Test has_tags filter."""
+    tags = Column(name="tags[hello]", entity=None)
+    not_tags = Column(name="not_tags", entity=None)
+
+    assert _has_tags_filter(tags) is True
+    assert _has_tags_filter(not_tags) is False
+    assert _has_tags_filter(Function("any", parameters=[tags])) is True
+    assert _has_tags_filter(Function("any", parameters=[not_tags])) is False
+    assert (
+        _has_tags_filter(Function("any", parameters=[Function("any", parameters=[tags])])) is True
+    )
+    assert (
+        _has_tags_filter(Function("any", parameters=[Function("any", parameters=[not_tags])]))
+        is False
+    )
+
+
+def test_substitute_tags_filter():
+    tags = Condition(lhs=Column(name="tags[hello]", entity=None), op=Op.EQ, rhs=True)
+    flags = Condition(lhs=Column(name="flags[hello]", entity=None), op=Op.EQ, rhs=True)
+    not_tags = Condition(lhs=Column(name="not_tags", entity=None), op=Op.EQ, rhs=True)
+
+    assert substitute_tags_filter(not_tags) == not_tags
+    assert substitute_tags_filter(tags) == flags
+    assert substitute_tags_filter(And(conditions=[tags, not_tags])) == And(
+        conditions=[flags, not_tags]
+    )
+    assert substitute_tags_filter(Or(conditions=[tags, not_tags])) == Or(
+        conditions=[flags, not_tags]
+    )
+
+
+def test__substitute_tags_filter():
+    tags = Column(name="tags[hello]", entity=None)
+    flags = Column(name="flags[hello]", entity=None)
+    not_tags = Column(name="not_tags", entity=None)
+
+    assert _substitute_tags_filter(tags) == flags
+    assert _substitute_tags_filter(not_tags) == not_tags
+    assert _substitute_tags_filter(Function("any", parameters=[tags])) == Function(
+        "any", parameters=[flags]
+    )
+    assert _substitute_tags_filter(Function("any", parameters=[not_tags])) == Function(
+        "any", parameters=[not_tags]
+    )
+    assert _substitute_tags_filter(
+        Function("any", parameters=[Function("any", parameters=[tags])])
+    ) == Function("any", parameters=[Function("any", parameters=[flags])])
+    assert _substitute_tags_filter(
+        Function("any", parameters=[Function("any", parameters=[not_tags])])
+    ) == Function("any", parameters=[Function("any", parameters=[not_tags])])

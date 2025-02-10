@@ -1,5 +1,3 @@
-import {Project} from 'sentry/types';
-
 export enum RuleType {
   PATTERN = 'pattern',
   CREDITCARD = 'creditcard',
@@ -43,7 +41,7 @@ export type SourceSuggestion = {
   type: SourceSuggestionType;
   value: string;
   description?: string;
-  examples?: Array<string>;
+  examples?: string[];
 };
 
 type RuleBase = {
@@ -122,8 +120,6 @@ export type PiiConfig =
   | PiiConfigReplace
   | PiiConfigReplaceAndPattern;
 
-export type Applications = Record<string, Array<string>>;
+export type Applications = Record<string, string[]>;
 
 export type Errors = Partial<Record<KeysOfUnion<Rule>, string>>;
-
-export type ProjectId = Project['id'] | undefined;

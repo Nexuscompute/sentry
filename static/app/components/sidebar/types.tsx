@@ -1,9 +1,14 @@
 export type SidebarOrientation = 'top' | 'left';
 
 export enum SidebarPanelKey {
-  Broadcasts = 'broadcasts',
-  OnboardingWizard = 'todos',
-  ServiceIncidents = 'statusupdate',
+  BROADCASTS = 'broadcasts',
+  ONBOARDING_WIZARD = 'todos',
+  SERVICE_INCIDENTS = 'statusupdate',
+  PERFORMANCE_ONBOARDING = 'performance_onboarding',
+  REPLAYS_ONBOARDING = 'replays_onboarding',
+  PROFILING_ONBOARDING = 'profiling_onboarding',
+  FEEDBACK_ONBOARDING = 'feedback_onboarding',
+  FEATURE_FLAG_ONBOARDING = 'flag_onboarding',
 }
 
 export type CommonSidebarProps = {
@@ -27,4 +32,8 @@ export type CommonSidebarProps = {
    * The orientation of the sidebar
    */
   orientation: SidebarOrientation;
+  /**
+   * Alternate collapsed state
+   */
+  hasNewNav?: boolean;
 };
