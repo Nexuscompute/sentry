@@ -1,20 +1,23 @@
 import {useEffect} from 'react';
-import {withRouter, WithRouterProps} from 'react-router';
 import styled from '@emotion/styled';
+import type {Scope} from '@sentry/core';
 import * as Sentry from '@sentry/react';
 
-import Alert from 'sentry/components/alert';
+import {getLastEventId} from 'sentry/bootstrap/initializeSdk';
+import {Alert} from 'sentry/components/core/alert';
+import ExternalLink from 'sentry/components/links/externalLink';
 import List from 'sentry/components/list';
 import ListItem from 'sentry/components/list/listItem';
 import {t, tct} from 'sentry/locale';
 import OrganizationStore from 'sentry/stores/organizationStore';
 import {useLegacyStore} from 'sentry/stores/useLegacyStore';
-import space from 'sentry/styles/space';
-import {Project} from 'sentry/types';
+import {space} from 'sentry/styles/space';
+import type {Project} from 'sentry/types/project';
 import getRouteStringFromRoutes from 'sentry/utils/getRouteStringFromRoutes';
+import {useRoutes} from 'sentry/utils/useRoutes';
 import withProject from 'sentry/utils/withProject';
 
-type Props = WithRouterProps & {
+type Props = {
   /**
    * Disable logging to Sentry
    */
@@ -27,7 +30,8 @@ type Props = WithRouterProps & {
   project?: Project;
 };
 
-function RouteError({error, disableLogSentry, disableReport, project, routes}: Props) {
+function RouteError({error, disableLogSentry, disableReport, project}: Props) {
+  const routes = useRoutes();
   const {organization} = useLegacyStore(OrganizationStore);
 
   useEffect(() => {
@@ -39,7 +43,7 @@ function RouteError({error, disableLogSentry, disableReport, project, routes}: P
     }
 
     const route = getRouteStringFromRoutes(routes);
-    const enrichScopeContext = (scope: Sentry.Scope) => {
+    const enrichScopeContext = (scope: Scope) => {
       scope.setExtra('route', route);
       scope.setExtra('orgFeatures', organization?.features ?? []);
       scope.setExtra('orgAccess', organization?.access ?? []);
@@ -59,7 +63,7 @@ function RouteError({error, disableLogSentry, disableReport, project, routes}: P
       } catch (e) {
         Sentry.withScope(scope => {
           enrichScopeContext(scope);
-          Sentry.captureException(e);
+          scope.setExtra('cannotSetMessage', true);
         });
       }
     }
@@ -73,13 +77,14 @@ function RouteError({error, disableLogSentry, disableReport, project, routes}: P
       });
 
       if (!disableReport) {
-        Sentry.showReportDialog();
+        Sentry.showReportDialog({eventId: getLastEventId() || ''});
       }
     });
 
     return function cleanup() {
       window.clearTimeout(reportDialogTimeout);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error, disableLogSentry]);
 
   // Remove the report dialog on unmount
@@ -87,41 +92,45 @@ function RouteError({error, disableLogSentry, disableReport, project, routes}: P
 
   // TODO(dcramer): show additional resource links
   return (
-    <Alert type="error">
-      <Heading>{t('Oops! Something went wrong')}</Heading>
-      <p>
-        {t(`
+    <Alert.Container>
+      <Alert type="error">
+        <Heading>{t('Oops! Something went wrong')}</Heading>
+        <p>
+          {t(`
           It looks like you've hit an issue in our client application. Don't worry though!
           We use Sentry to monitor Sentry and it's likely we're already looking into this!
           `)}
-      </p>
-      <p>{t("If you're daring, you may want to try the following:")}</p>
-      <List symbol="bullet">
-        {window && window.adblockSuspected && (
+        </p>
+        <p>{t("If you're daring, you may want to try the following:")}</p>
+        <List symbol="bullet">
+          {window?.adblockSuspected && (
+            <ListItem>
+              {t(
+                "We detected something AdBlock-like. Try disabling it, as it's known to cause issues."
+              )}
+            </ListItem>
+          )}
           <ListItem>
-            {t(
-              "We detected something AdBlock-like. Try disabling it, as it's known to cause issues."
-            )}
+            {tct(`Give it a few seconds and [link:reload the page].`, {
+              link: (
+                <a
+                  onClick={() => {
+                    window.location.href = String(window.location.href);
+                  }}
+                />
+              ),
+            })}
           </ListItem>
-        )}
-        <ListItem>
-          {tct(`Give it a few seconds and [link:reload the page].`, {
-            link: (
-              <a
-                onClick={() => {
-                  window.location.href = window.location.href;
-                }}
-              />
-            ),
-          })}
-        </ListItem>
-        <ListItem>
-          {tct(`If all else fails, [link:contact us] with more details.`, {
-            link: <a href="https://github.com/getsentry/sentry/issues/new/choose" />,
-          })}
-        </ListItem>
-      </List>
-    </Alert>
+          <ListItem>
+            {tct(`If all else fails, [link:contact us] with more details.`, {
+              link: (
+                <ExternalLink href="https://github.com/getsentry/sentry/issues/new/choose" />
+              ),
+            })}
+          </ListItem>
+        </List>
+      </Alert>
+    </Alert.Container>
   );
 }
 
@@ -131,4 +140,4 @@ const Heading = styled('h1')`
   margin-bottom: ${space(1)};
 `;
 
-export default withRouter(withProject(RouteError));
+export default withProject(RouteError);

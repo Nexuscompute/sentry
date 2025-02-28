@@ -1,28 +1,29 @@
 import LazyLoad from 'react-lazyload';
 import {useTheme} from '@emotion/react';
 import styled from '@emotion/styled';
-import {Location} from 'history';
+import type {Location} from 'history';
 
 import GuideAnchor from 'sentry/components/assistant/guideAnchor';
-import Button from 'sentry/components/button';
+import {LinkButton} from 'sentry/components/button';
 import MiniBarChart from 'sentry/components/charts/miniBarChart';
+import {Tag} from 'sentry/components/core/badge/tag';
 import Count from 'sentry/components/count';
 import GlobalSelectionLink from 'sentry/components/globalSelectionLink';
 import ProjectBadge from 'sentry/components/idBadge/projectBadge';
 import Link from 'sentry/components/links/link';
 import NotAvailable from 'sentry/components/notAvailable';
 import {extractSelectionParameters} from 'sentry/components/organizations/pageFilters/utils';
-import {PanelItem} from 'sentry/components/panels';
+import PanelItem from 'sentry/components/panels/panelItem';
 import Placeholder from 'sentry/components/placeholder';
-import Tag from 'sentry/components/tag';
-import Tooltip from 'sentry/components/tooltip';
+import {Tooltip} from 'sentry/components/tooltip';
 import {IconCheckmark, IconFire, IconWarning} from 'sentry/icons';
 import {t, tn} from 'sentry/locale';
-import overflowEllipsis from 'sentry/styles/overflowEllipsis';
-import space from 'sentry/styles/space';
-import {Organization, Release, ReleaseProject} from 'sentry/types';
+import {space} from 'sentry/styles/space';
+import type {Organization} from 'sentry/types/organization';
+import type {Release, ReleaseProject} from 'sentry/types/release';
 import {defined} from 'sentry/utils';
 import type {IconSize} from 'sentry/utils/theme';
+import {makeReleasesPathname} from 'sentry/views/releases/utils/pathnames';
 
 import {
   ADOPTION_STAGE_LABELS,
@@ -32,13 +33,13 @@ import {
   isMobileRelease,
 } from '../../utils';
 import {ReleasesDisplayOption} from '../releasesDisplayOptions';
-import {ReleasesRequestRenderProps} from '../releasesRequest';
+import type {ReleasesRequestRenderProps} from '../releasesRequest';
 
 import {
   AdoptionColumn,
   AdoptionStageColumn,
-  CrashesColumn,
   CrashFreeRateColumn,
+  DisplaySmallCol,
   NewIssuesColumn,
   ReleaseProjectColumn,
   ReleaseProjectsLayout,
@@ -49,14 +50,14 @@ const CRASH_FREE_WARNING_THRESHOLD = 99.5;
 
 function getCrashFreeIcon(crashFreePercent: number, iconSize: IconSize = 'sm') {
   if (crashFreePercent < CRASH_FREE_DANGER_THRESHOLD) {
-    return <IconFire color="red300" size={iconSize} />;
+    return <IconFire color="errorText" size={iconSize} />;
   }
 
   if (crashFreePercent < CRASH_FREE_WARNING_THRESHOLD) {
-    return <IconWarning color="yellow300" size={iconSize} />;
+    return <IconWarning color="warningText" size={iconSize} />;
   }
 
-  return <IconCheckmark isCircled color="green300" size={iconSize} />;
+  return <IconCheckmark isCircled color="successText" size={iconSize} />;
 }
 
 type Props = {
@@ -74,17 +75,17 @@ type Props = {
 };
 
 function ReleaseCardProjectRow({
-  index,
-  project,
-  organization,
-  location,
-  getHealthData,
-  releaseVersion,
   activeDisplay,
+  adoptionStages,
+  getHealthData,
+  index,
+  isTopRelease,
+  location,
+  organization,
+  project,
+  releaseVersion,
   showPlaceholders,
   showReleaseAdoptionStages,
-  isTopRelease,
-  adoptionStages,
 }: Props) {
   const theme = useTheme();
   const {id, newGroups} = project;
@@ -94,6 +95,7 @@ function ReleaseCardProjectRow({
     id,
     ReleasesDisplayOption.SESSIONS
   );
+
   const crashFreeRate = getHealthData.getCrashFreeRate(releaseVersion, id, activeDisplay);
   const get24hCountByProject = getHealthData.get24hCountByProject(id, activeDisplay);
   const timeSeries = getHealthData.getTimeSeries(releaseVersion, id, activeDisplay);
@@ -102,11 +104,12 @@ function ReleaseCardProjectRow({
   const adoptionStage =
     showReleaseAdoptionStages &&
     adoptionStages?.[project.slug] &&
-    adoptionStages?.[project.slug].stage;
+    adoptionStages?.[project.slug]!.stage;
 
   const adoptionStageLabel =
-    Boolean(get24hCountByProject && adoptionStage && isMobileRelease(project.platform)) &&
-    ADOPTION_STAGE_LABELS[adoptionStage];
+    get24hCountByProject && adoptionStage && isMobileRelease(project.platform)
+      ? ADOPTION_STAGE_LABELS[adoptionStage]
+      : null;
 
   return (
     <ProjectRow data-test-id="release-card-project-row">
@@ -121,7 +124,10 @@ function ReleaseCardProjectRow({
               <Tooltip title={adoptionStageLabel.tooltipTitle} isHoverable>
                 <Link
                   to={{
-                    pathname: `/organizations/${organization.slug}/releases/`,
+                    pathname: makeReleasesPathname({
+                      organization,
+                      path: '/',
+                    }),
                     query: {
                       ...location.query,
                       query: `release.stage:${adoptionStage}`,
@@ -178,7 +184,7 @@ function ReleaseCardProjectRow({
           )}
         </CrashFreeRateColumn>
 
-        <CrashesColumn>
+        <DisplaySmallCol>
           {showPlaceholders ? (
             <StyledPlaceholder width="30px" />
           ) : defined(crashCount) ? (
@@ -196,7 +202,7 @@ function ReleaseCardProjectRow({
           ) : (
             <NotAvailable />
           )}
-        </CrashesColumn>
+        </DisplaySmallCol>
 
         <NewIssuesColumn>
           <Tooltip title={t('Open in Issues')}>
@@ -210,12 +216,13 @@ function ReleaseCardProjectRow({
 
         <ViewColumn>
           <GuideAnchor disabled={!isTopRelease || index !== 0} target="view_release">
-            <Button
-              size="xsmall"
+            <LinkButton
+              size="xs"
               to={{
-                pathname: `/organizations/${
-                  organization.slug
-                }/releases/${encodeURIComponent(releaseVersion)}/`,
+                pathname: makeReleasesPathname({
+                  organization,
+                  path: `/${encodeURIComponent(releaseVersion)}/`,
+                }),
                 query: {
                   ...extractSelectionParameters(location.query),
                   project: project.id,
@@ -224,7 +231,7 @@ function ReleaseCardProjectRow({
               }}
             >
               {t('View')}
-            </Button>
+            </LinkButton>
           </GuideAnchor>
         </ViewColumn>
       </ReleaseProjectsLayout>
@@ -236,7 +243,7 @@ export default ReleaseCardProjectRow;
 
 const ProjectRow = styled(PanelItem)`
   padding: ${space(1)} ${space(2)};
-  @media (min-width: ${p => p.theme.breakpoints[1]}) {
+  @media (min-width: ${p => p.theme.breakpoints.medium}) {
     font-size: ${p => p.theme.fontSizeMedium};
   }
 `;
@@ -268,7 +275,7 @@ const CrashFreeWrapper = styled('div')`
 `;
 
 const ViewColumn = styled('div')`
-  ${overflowEllipsis};
+  ${p => p.theme.overflowEllipsis};
   line-height: 20px;
   text-align: right;
 `;

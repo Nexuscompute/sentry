@@ -1,55 +1,90 @@
 import styled from '@emotion/styled';
 
 import ErrorLevel from 'sentry/components/events/errorLevel';
-import overflowEllipsis from 'sentry/styles/overflowEllipsis';
-import space from 'sentry/styles/space';
-import {Level} from 'sentry/types';
+import UnhandledTag from 'sentry/components/group/inboxBadges/unhandledTag';
+import {t} from 'sentry/locale';
+import {space} from 'sentry/styles/space';
+import type {Event, EventOrGroupType, Level} from 'sentry/types/event';
+import type {BaseGroup, GroupTombstoneHelper} from 'sentry/types/group';
+import {eventTypeHasLogLevel} from 'sentry/utils/events';
+import useOrganization from 'sentry/utils/useOrganization';
+import {Divider} from 'sentry/views/issueDetails/divider';
+import {useHasStreamlinedUI} from 'sentry/views/issueDetails/utils';
 
 type Props = {
-  annotations?: React.ReactNode;
+  data: Event | BaseGroup | GroupTombstoneHelper;
+  message: React.ReactNode;
+  type: EventOrGroupType;
   className?: string;
-  hasGuideAnchor?: boolean;
   level?: Level;
-  levelIndicatorSize?: string;
-  message?: React.ReactNode;
+  /**
+   * Size of the level indicator.
+   */
+  levelIndicatorSize?: 9 | 10 | 11;
+  showUnhandled?: boolean;
 };
 
-const BaseEventMessage = ({
+function EventMessage({
   className,
   level,
   levelIndicatorSize,
   message,
-  annotations,
-}: Props) => (
-  <div className={className}>
-    {level && (
-      <StyledErrorLevel size={levelIndicatorSize} level={level}>
-        {level}
-      </StyledErrorLevel>
-    )}
+  type,
+  showUnhandled = false,
+}: Props) {
+  const hasStreamlinedUI = useHasStreamlinedUI();
+  const organization = useOrganization({allowNull: true});
+  const showEventLevel = level && eventTypeHasLogLevel(type);
+  const hasNewIssueStreamTableLayout = organization?.features.includes(
+    'issue-stream-table-layout'
+  );
+  const renderedMessage = message ? (
+    <Message>{message}</Message>
+  ) : (
+    <NoMessage>({t('No error message')})</NoMessage>
+  );
 
-    {message && <Message>{message}</Message>}
+  const showErrorLevelDivider = Boolean(
+    hasStreamlinedUI && showEventLevel && !hasNewIssueStreamTableLayout
+  );
 
-    {annotations}
-  </div>
-);
+  return (
+    <LevelMessageContainer className={className}>
+      {showEventLevel && (
+        <ErrorLevelWithMargin
+          level={level}
+          size={levelIndicatorSize}
+          hasDivider={showErrorLevelDivider}
+        />
+      )}
+      {showErrorLevelDivider ? <Divider /> : null}
+      {showUnhandled ? <UnhandledTag /> : null}
+      {hasStreamlinedUI && showUnhandled ? <Divider /> : null}
+      {renderedMessage}
+    </LevelMessageContainer>
+  );
+}
 
-const EventMessage = styled(BaseEventMessage)`
+const LevelMessageContainer = styled('div')`
   display: flex;
+  gap: ${space(1)};
   align-items: center;
-  position: relative;
   line-height: 1.2;
   overflow: hidden;
 `;
 
-const StyledErrorLevel = styled(ErrorLevel)`
-  margin-right: ${space(1)};
-`;
-
-const Message = styled('span')`
-  ${overflowEllipsis}
+const Message = styled('div')`
+  ${p => p.theme.overflowEllipsis}
   width: auto;
   max-height: 38px;
+`;
+
+const NoMessage = styled(Message)`
+  color: ${p => p.theme.subText};
+`;
+
+const ErrorLevelWithMargin = styled(ErrorLevel)<{hasDivider: boolean}>`
+  margin-right: ${p => (p.hasDivider ? 0 : space(0.5))};
 `;
 
 export default EventMessage;

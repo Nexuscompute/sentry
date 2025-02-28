@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from typing import Mapping, Sequence
-
-from rest_framework import serializers
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from sentry.constants import SENTRY_APP_ACTIONS
-from sentry.mediators import alert_rule_actions
-from sentry.mediators.external_requests.alert_rule_action_requester import AlertRuleActionResult
-from sentry.models import SentryAppInstallation
+from sentry.sentry_apps.services.app import app_service
+from sentry.sentry_apps.utils.alert_rule_action import raise_alert_rule_action_result_errors
 
 
 def trigger_sentry_app_action_creators_for_issues(
-    actions: Sequence[Mapping[str, str]]
+    actions: Sequence[Mapping[str, Any]]
 ) -> str | None:
     created = None
     for action in actions:
@@ -19,13 +17,11 @@ def trigger_sentry_app_action_creators_for_issues(
         if not action.get("id") in SENTRY_APP_ACTIONS:
             continue
 
-        install = SentryAppInstallation.objects.get(uuid=action.get("sentryAppInstallationUuid"))
-        result: AlertRuleActionResult = alert_rule_actions.AlertRuleActionCreator.run(
-            install=install,
-            fields=action.get("settings"),
+        result = app_service.trigger_sentry_app_action_creators(
+            fields=action["settings"], install_uuid=action.get("sentryAppInstallationUuid")
         )
         # Bubble up errors from Sentry App to the UI
-        if not result["success"]:
-            raise serializers.ValidationError({"actions": [result["message"]]})
+        if not result.success:
+            raise_alert_rule_action_result_errors(result)
         created = "alert-rule-action"
     return created

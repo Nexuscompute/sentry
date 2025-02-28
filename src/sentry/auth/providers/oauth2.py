@@ -1,20 +1,28 @@
 import abc
 import logging
+import secrets
+from collections.abc import Mapping
 from time import time
-from typing import Any, Mapping
+from typing import Any
 from urllib.parse import parse_qsl, urlencode
-from uuid import uuid4
 
-from rest_framework.request import Request
-from rest_framework.response import Response
+import orjson
+from django.http import HttpRequest, HttpResponse
+from django.http.response import HttpResponseRedirect
+from django.urls import reverse
 
 from sentry.auth.exceptions import IdentityNotValid
 from sentry.auth.provider import Provider
 from sentry.auth.view import AuthView
 from sentry.http import safe_urlopen, safe_urlread
-from sentry.utils import json
+from sentry.models.authidentity import AuthIdentity
+from sentry.utils.http import absolute_uri
 
 ERR_INVALID_STATE = "An error occurred while validating your request."
+
+
+def _get_redirect_url() -> str:
+    return absolute_uri(reverse("sentry-auth-sso"))
 
 
 class OAuth2Login(AuthView):
@@ -46,18 +54,20 @@ class OAuth2Login(AuthView):
             "redirect_uri": redirect_uri,
         }
 
-    def dispatch(self, request: Request, helper) -> Response:
+    def dispatch(self, request: HttpRequest, helper) -> HttpResponse:
         if "code" in request.GET:
             return helper.next_step()
 
-        state = uuid4().hex
+        state = secrets.token_hex()
 
-        params = self.get_authorize_params(state=state, redirect_uri=helper.get_redirect_url())
-        redirect_uri = f"{self.get_authorize_url()}?{urlencode(params)}"
+        params = self.get_authorize_params(state=state, redirect_uri=_get_redirect_url())
+        authorization_url = f"{self.get_authorize_url()}?{urlencode(params)}"
 
         helper.bind_state("state", state)
+        if request.subdomain:
+            helper.bind_state("subdomain", request.subdomain)
 
-        return self.redirect(redirect_uri)
+        return HttpResponseRedirect(authorization_url)
 
 
 class OAuth2Callback(AuthView):
@@ -83,16 +93,16 @@ class OAuth2Callback(AuthView):
             "client_secret": self.client_secret,
         }
 
-    def exchange_token(self, request: Request, helper, code):
+    def exchange_token(self, request: HttpRequest, helper, code):
         # TODO: this needs the auth yet
-        data = self.get_token_params(code=code, redirect_uri=helper.get_redirect_url())
+        data = self.get_token_params(code=code, redirect_uri=_get_redirect_url())
         req = safe_urlopen(self.access_token_url, data=data)
         body = safe_urlread(req)
         if req.headers["Content-Type"].startswith("application/x-www-form-urlencoded"):
             return dict(parse_qsl(body))
-        return json.loads(body)
+        return orjson.loads(body)
 
-    def dispatch(self, request: Request, helper) -> Response:
+    def dispatch(self, request: HttpRequest, helper) -> HttpResponse:
         error = request.GET.get("error")
         state = request.GET.get("state")
         code = request.GET.get("code")
@@ -121,14 +131,15 @@ class OAuth2Callback(AuthView):
 
 
 class OAuth2Provider(Provider, abc.ABC):
-    client_id = None
-    client_secret = None
+    is_partner = False
 
+    @abc.abstractmethod
     def get_client_id(self):
-        return self.client_id
+        raise NotImplementedError
 
+    @abc.abstractmethod
     def get_client_secret(self):
-        return self.client_secret
+        raise NotImplementedError
 
     def get_auth_pipeline(self):
         return [
@@ -138,9 +149,9 @@ class OAuth2Provider(Provider, abc.ABC):
 
     @abc.abstractmethod
     def get_refresh_token_url(self) -> str:
-        pass
+        raise NotImplementedError
 
-    def get_refresh_token_params(self, refresh_token):
+    def get_refresh_token_params(self, refresh_token: str) -> dict[str, str | None]:
         return {
             "client_id": self.get_client_id(),
             "client_secret": self.get_client_secret(),
@@ -168,7 +179,7 @@ class OAuth2Provider(Provider, abc.ABC):
             'data': self.get_oauth_data(data),
         }
         """
-        pass
+        raise NotImplementedError
 
     def update_identity(self, new_data, current_data):
         # we want to maintain things like refresh_token that might not
@@ -177,7 +188,7 @@ class OAuth2Provider(Provider, abc.ABC):
             new_data.setdefault("refresh_token", current_data["refresh_token"])
         return new_data
 
-    def refresh_identity(self, auth_identity):
+    def refresh_identity(self, auth_identity: AuthIdentity) -> None:
         refresh_token = auth_identity.data.get("refresh_token")
 
         if not refresh_token:
@@ -188,7 +199,7 @@ class OAuth2Provider(Provider, abc.ABC):
 
         try:
             body = safe_urlread(req)
-            payload = json.loads(body)
+            payload = orjson.loads(body)
         except Exception:
             payload = {}
 

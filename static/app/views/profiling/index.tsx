@@ -1,34 +1,46 @@
 import Feature from 'sentry/components/acl/feature';
-import Alert from 'sentry/components/alert';
+import {Alert} from 'sentry/components/core/alert';
+import * as Layout from 'sentry/components/layouts/thirds';
+import {useRedirectNavV2Routes} from 'sentry/components/nav/useRedirectNavV2Routes';
+import NoProjectMessage from 'sentry/components/noProjectMessage';
+import Redirect from 'sentry/components/redirect';
 import {t} from 'sentry/locale';
-import {PageContent} from 'sentry/styles/organization';
-import {Organization} from 'sentry/types';
-import withOrganization from 'sentry/utils/withOrganization';
+import useOrganization from 'sentry/utils/useOrganization';
+
+const profilingFeature = ['profiling'];
 
 type Props = {
-  children: React.ReactChildren;
-  organization: Organization;
+  children: React.ReactNode;
 };
 
-function ProfilingContainer({organization, children}: Props) {
-  function renderNoAccess() {
-    return (
-      <PageContent>
-        <Alert type="warning">{t("You don't have access to this feature")}</Alert>
-      </PageContent>
-    );
+function ProfilingContainer({children}: Props) {
+  const organization = useOrganization();
+
+  const redirectPath = useRedirectNavV2Routes({
+    oldPathPrefix: '/profiling/',
+    newPathPrefix: '/explore/profiling/',
+  });
+
+  if (redirectPath) {
+    return <Redirect to={redirectPath} />;
   }
 
   return (
     <Feature
       hookName="feature-disabled:profiling-page"
-      features={['profiling']}
+      features={profilingFeature}
       organization={organization}
-      renderDisabled={renderNoAccess}
+      renderDisabled={() => (
+        <Layout.Page withPadding>
+          <Alert.Container>
+            <Alert type="warning">{t("You don't have access to this feature")}</Alert>
+          </Alert.Container>
+        </Layout.Page>
+      )}
     >
-      {children}
+      <NoProjectMessage organization={organization}>{children}</NoProjectMessage>
     </Feature>
   );
 }
 
-export default withOrganization(ProfilingContainer);
+export default ProfilingContainer;

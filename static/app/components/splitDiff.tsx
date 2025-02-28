@@ -1,5 +1,14 @@
 import styled from '@emotion/styled';
-import {Change, diffChars, diffLines, diffWords} from 'diff';
+import type {Change} from 'diff';
+import {diffChars, diffLines, diffWords} from 'diff';
+
+// @TODO(jonasbadalic): This used to be defined on the theme, but is component specific and lacks dark mode.
+export const DIFF_COLORS = {
+  removedRow: 'hsl(358deg 89% 65% / 15%)',
+  removed: 'hsl(358deg 89% 65% / 30%)',
+  addedRow: 'hsl(100deg 100% 87% / 18%)',
+  added: 'hsl(166deg 58% 47% / 32%)',
+} as const;
 
 const diffFnMap = {
   chars: diffChars,
@@ -14,7 +23,7 @@ type Props = {
   type?: keyof typeof diffFnMap;
 };
 
-const SplitDiff = ({className, type = 'lines', base, target}: Props) => {
+function SplitDiff({className, type = 'lines', base, target}: Props) {
   const diffFn = diffFnMap[type];
 
   const baseLines = base.split('\n');
@@ -28,7 +37,7 @@ const SplitDiff = ({className, type = 'lines', base, target}: Props) => {
   );
 
   return (
-    <SplitTable className={className}>
+    <SplitTable className={className} data-test-id="split-diff">
       <SplitBody>
         {results.map((line, j) => {
           const highlightAdded = line.find(result => result.added);
@@ -67,7 +76,7 @@ const SplitDiff = ({className, type = 'lines', base, target}: Props) => {
       </SplitBody>
     </SplitTable>
   );
-};
+}
 
 const SplitTable = styled('table')`
   table-layout: fixed;
@@ -82,8 +91,8 @@ const SplitBody = styled('tbody')`
 
 const Cell = styled('td')<{isAdded?: Change; isRemoved?: Change}>`
   vertical-align: top;
-  ${p => p.isRemoved && `background-color: ${p.theme.diff.removedRow}`};
-  ${p => p.isAdded && `background-color: ${p.theme.diff.addedRow}`};
+  ${p => p.isRemoved && `background-color: ${DIFF_COLORS.removedRow}`};
+  ${p => p.isAdded && `background-color: ${DIFF_COLORS.addedRow}`};
 `;
 
 const Gap = styled('td')`
@@ -98,8 +107,8 @@ const Line = styled('div')`
 const Word = styled('span')<{isAdded?: boolean; isRemoved?: boolean}>`
   white-space: pre-wrap;
   word-break: break-all;
-  ${p => p.isRemoved && `background-color: ${p.theme.diff.removed}`};
-  ${p => p.isAdded && `background-color: ${p.theme.diff.added}`};
+  ${p => p.isRemoved && `background-color: ${DIFF_COLORS.removed}`};
+  ${p => p.isAdded && `background-color: ${DIFF_COLORS.added}`};
 `;
 
 export default SplitDiff;

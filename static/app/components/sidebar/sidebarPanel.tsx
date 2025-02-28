@@ -3,11 +3,18 @@ import {createPortal} from 'react-dom';
 import {css} from '@emotion/react';
 import styled from '@emotion/styled';
 
+import {
+  SIDEBAR_COLLAPSED_WIDTH,
+  SIDEBAR_EXPANDED_WIDTH,
+  SIDEBAR_MOBILE_HEIGHT,
+} from 'sentry/components/sidebar/constants';
 import {IconClose} from 'sentry/icons';
+import {t} from 'sentry/locale';
+import HookStore from 'sentry/stores/hookStore';
 import {slideInLeft} from 'sentry/styles/animations';
-import space from 'sentry/styles/space';
+import {space} from 'sentry/styles/space';
 
-import {CommonSidebarProps} from './types';
+import type {CommonSidebarProps} from './types';
 
 type PositionProps = Pick<CommonSidebarProps, 'orientation' | 'collapsed'>;
 
@@ -27,20 +34,18 @@ const PanelContainer = styled('div')<PositionProps>`
   ${p =>
     p.orientation === 'top'
       ? css`
-          top: ${p.theme.sidebar.mobileHeight};
+          top: ${SIDEBAR_MOBILE_HEIGHT};
           left: 0;
           right: 0;
         `
       : css`
           width: 460px;
           top: 0;
-          left: ${p.collapsed
-            ? p.theme.sidebar.collapsedWidth
-            : p.theme.sidebar.expandedWidth};
+          left: ${p.collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH};
         `};
 `;
 
-interface Props extends React.HTMLAttributes<HTMLDivElement> {
+export interface SidebarPanelProps extends React.HTMLAttributes<HTMLDivElement> {
   collapsed: CommonSidebarProps['collapsed'];
   hidePanel: CommonSidebarProps['hidePanel'];
   orientation: CommonSidebarProps['orientation'];
@@ -59,14 +64,14 @@ const getSidebarPortal = () => {
   return portal as HTMLDivElement;
 };
 
-function SidebarPanel({
+export default function SidebarPanel({
   orientation,
   collapsed,
   hidePanel,
   title,
   children,
   ...props
-}: Props): React.ReactElement {
+}: SidebarPanelProps): React.ReactElement {
   const portalEl = useRef<HTMLDivElement>(getSidebarPortal());
 
   const panelCloseHandler = useCallback(
@@ -79,6 +84,11 @@ function SidebarPanel({
         return;
       }
 
+      // If we are in Sandbox, don't hide panel when the modal is clicked (before the email is added)
+      const blockHideSidebar = HookStore.get('onboarding:block-hide-sidebar')[0]?.();
+      if (blockHideSidebar) {
+        return;
+      }
       hidePanel();
     },
     [hidePanel]
@@ -104,7 +114,7 @@ function SidebarPanel({
       {title ? (
         <SidebarPanelHeader>
           <Title>{title}</Title>
-          <PanelClose onClick={hidePanel} />
+          <PanelClose size="lg" onClick={hidePanel} aria-label={t('Close Panel')} />
         </SidebarPanelHeader>
       ) : null}
       <SidebarPanelBody hasHeader={!!title}>{children}</SidebarPanelBody>
@@ -112,8 +122,6 @@ function SidebarPanel({
     portalEl.current
   );
 }
-
-export default SidebarPanel;
 
 const SidebarPanelHeader = styled('div')`
   border-bottom: 1px solid ${p => p.theme.border};
@@ -145,10 +153,6 @@ const PanelClose = styled(IconClose)`
     color: ${p => p.theme.textColor};
   }
 `;
-
-PanelClose.defaultProps = {
-  size: 'lg',
-};
 
 const Title = styled('div')`
   font-size: ${p => p.theme.fontSizeExtraLarge};

@@ -2,7 +2,7 @@ import styled from '@emotion/styled';
 
 import ExternalLink from 'sentry/components/links/externalLink';
 import {IconOpen} from 'sentry/icons';
-import space from 'sentry/styles/space';
+import {space} from 'sentry/styles/space';
 
 import effectiveDirectives from './effectiveDirectives';
 
@@ -10,13 +10,13 @@ type EffectiveDirective = keyof typeof effectiveDirectives;
 
 const linkOverrides = {'script-src': 'script-src_2'};
 
-type Props = {
+export type HelpProps = {
   data: {
     effective_directive: EffectiveDirective;
   };
 };
 
-const CSPHelp = ({data: {effective_directive: key}}: Props) => {
+function CSPHelp({data: {effective_directive: key}}: HelpProps) {
   const getHelp = () => ({
     __html: effectiveDirectives[key],
   });
@@ -26,6 +26,7 @@ const CSPHelp = ({data: {effective_directive: key}}: Props) => {
       'https://developer.mozilla.org/en-US/docs/Web/Security/CSP/CSP_policy_directives#';
 
     if (key in linkOverrides) {
+      // @ts-expect-error TS(7053): Element implicitly has an 'any' type because expre... Remove this comment to see the full error message
       return `${baseLink}${linkOverrides[key]}`;
     }
 
@@ -56,7 +57,7 @@ const CSPHelp = ({data: {effective_directive: key}}: Props) => {
       </StyledP>
     </div>
   );
-};
+}
 
 export default CSPHelp;
 

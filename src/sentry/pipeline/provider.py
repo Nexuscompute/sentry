@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import abc
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from sentry.pipeline import Pipeline
@@ -17,29 +18,25 @@ class PipelineProvider(abc.ABC):
     def __init__(self) -> None:
         self.config: dict[str, Any] = {}
 
-    @property
-    @abc.abstractmethod
-    def key(self) -> str:
-        """
-        A unique identifier (e.g. 'slack'). Used to lookup sibling classes and
-        the `key` used when creating Integration objects.
-        """
-        pass
+    # abstract
+    """
+    A unique identifier (e.g. 'slack'). Used to lookup sibling classes and
+    the `key` used when creating Integration objects.
+    """
+    key: str
 
     @property
     @abc.abstractmethod
     def name(self) -> str:
         """A human readable name (e.g. 'Slack')."""
-        pass
 
     @abc.abstractmethod
-    def get_pipeline_views(self) -> Sequence[PipelineView]:
+    def get_pipeline_views(self) -> Sequence[PipelineView | Callable[[], PipelineView]]:
         """
         Returns a list of instantiated views which implement the PipelineView
         interface. Each view will be dispatched in order.
         >>> return [OAuthInitView(), OAuthCallbackView()]
         """
-        pass
 
     def update_config(self, config: Mapping[str, Any]) -> None:
         """

@@ -1,11 +1,14 @@
 import styled from '@emotion/styled';
 
+import {space} from 'sentry/styles/space';
+
 const Slider = styled('input')<{hasLabel: boolean}>`
   /* stylelint-disable-next-line property-no-vendor-prefix */
   -webkit-appearance: none;
+  appearance: none;
   width: 100%;
   background: transparent;
-  margin: ${p => p.theme.grid}px 0 ${p => p.theme.grid * (p.hasLabel ? 2 : 1)}px;
+  margin: ${space(1)} 0 ${p => space(p.hasLabel ? 2 : 1)};
 
   &::-webkit-slider-runnable-track {
     width: 100%;
@@ -45,7 +48,9 @@ const Slider = styled('input')<{hasLabel: boolean}>`
     -webkit-appearance: none;
     margin-top: -7px;
     border: 0;
-    transition: background 0.1s, box-shadow 0.1s;
+    transition:
+      background 0.1s,
+      box-shadow 0.1s;
   }
 
   &::-moz-range-thumb {
@@ -57,9 +62,12 @@ const Slider = styled('input')<{hasLabel: boolean}>`
     cursor: pointer;
     /* stylelint-disable-next-line property-no-vendor-prefix */
     -webkit-appearance: none;
+    appearance: none;
     margin-top: -7px;
     border: 0;
-    transition: background 0.1s, box-shadow 0.1s;
+    transition:
+      background 0.1s,
+      box-shadow 0.1s;
   }
 
   &::-ms-thumb {
@@ -71,9 +79,12 @@ const Slider = styled('input')<{hasLabel: boolean}>`
     cursor: pointer;
     /* stylelint-disable-next-line property-no-vendor-prefix */
     -webkit-appearance: none;
+    appearance: none;
     margin-top: -7px;
     border: 0;
-    transition: background 0.1s, box-shadow 0.1s;
+    transition:
+      background 0.1s,
+      box-shadow 0.1s;
   }
 
   &::-ms-fill-lower {
@@ -144,16 +155,22 @@ const Slider = styled('input')<{hasLabel: boolean}>`
   }
 
   &:focus::-webkit-slider-thumb,
-  &.focus-visible::-webkit-slider-thumb {
-    box-shadow: ${p => p.theme.background} 0 0 0 3px, ${p => p.theme.focus} 0 0 0 6px;
+  &:focus-visible::-webkit-slider-thumb {
+    box-shadow:
+      ${p => p.theme.background} 0 0 0 3px,
+      ${p => p.theme.focus} 0 0 0 6px;
   }
   &:focus::-moz-range-thumb,
-  &.focus-visible::-moz-range-thumb {
-    box-shadow: ${p => p.theme.background} 0 0 0 3px, ${p => p.theme.focus} 0 0 0 6px;
+  &:focus-visible::-moz-range-thumb {
+    box-shadow:
+      ${p => p.theme.background} 0 0 0 3px,
+      ${p => p.theme.focus} 0 0 0 6px;
   }
   &:focus::-ms-thumb,
-  &.focus-visible::-ms-thumb {
-    box-shadow: ${p => p.theme.background} 0 0 0 3px, ${p => p.theme.focus} 0 0 0 6px;
+  &:focus-visible::-ms-thumb {
+    box-shadow:
+      ${p => p.theme.background} 0 0 0 3px,
+      ${p => p.theme.focus} 0 0 0 6px;
   }
 `;
 

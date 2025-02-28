@@ -1,6 +1,12 @@
 import Access from 'sentry/components/acl/access';
 import {t} from 'sentry/locale';
-import {Organization, SentryApp} from 'sentry/types';
+import type {
+  SentryApp,
+  SentryAppAvatar,
+  SentryAppAvatarPhotoType,
+  SentryAppSchemaElement,
+} from 'sentry/types/integrations';
+import type {Organization} from 'sentry/types/organization';
 
 import ActionButtons from './actionButtons';
 
@@ -12,16 +18,39 @@ type Props = {
   onClickPublish?: () => void;
 };
 
-const SentryApplicationRowButtons = ({
+const UI_COMPONENT_TYPES = ['stacktrace-link', 'issue-link'];
+
+const hasInvalidStatus = (app: SentryApp): boolean => {
+  return app.status !== 'unpublished';
+};
+
+const hasUploadedSentryAppPhoto = (
+  avatars: SentryAppAvatar[] | undefined,
+  photoType: SentryAppAvatarPhotoType
+): boolean => {
+  return avatars
+    ? avatars.some(
+        avatar => avatar.avatarType === 'upload' && avatar.photoType === photoType
+      )
+    : false;
+};
+
+const hasUIComponent = (elements: SentryAppSchemaElement[] | undefined): boolean => {
+  return elements
+    ? elements.some(element => UI_COMPONENT_TYPES.includes(element.type))
+    : false;
+};
+
+function SentryApplicationRowButtons({
   organization,
   app,
   onClickRemove,
   onClickPublish,
-}: Props) => {
+}: Props) {
   const isInternal = app.status === 'internal';
 
   return (
-    <Access access={['org:admin']} organization={organization}>
+    <Access access={['org:admin']}>
       {({hasAccess}) => {
         let disablePublishReason = '';
         let disableDeleteReason = '';
@@ -39,6 +68,26 @@ const SentryApplicationRowButtons = ({
           );
         }
 
+        // feature flag new publishing flow features
+        if (organization.features.includes(`streamlined-publishing-flow`)) {
+          if (app.status === 'publish_request_inprogress') {
+            disablePublishReason = t(
+              'This integration has already been submitted for publishing'
+            );
+          } else if (hasInvalidStatus(app)) {
+            disablePublishReason = t('Only unpublished integrations can be published');
+          } else if (!hasUploadedSentryAppPhoto(app.avatars, 'logo')) {
+            disablePublishReason = t('A logo is required to publish an integration');
+          } else if (
+            hasUIComponent(app.schema.elements) &&
+            !hasUploadedSentryAppPhoto(app.avatars, 'icon')
+          ) {
+            disablePublishReason = t(
+              'Integrations with a UI component must have an icon'
+            );
+          }
+        }
+
         return (
           <ActionButtons
             org={organization}
@@ -54,6 +103,6 @@ const SentryApplicationRowButtons = ({
       }}
     </Access>
   );
-};
+}
 
 export default SentryApplicationRowButtons;

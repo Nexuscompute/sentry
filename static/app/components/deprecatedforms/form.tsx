@@ -2,29 +2,29 @@ import {Component} from 'react';
 import styled from '@emotion/styled';
 import isEqual from 'lodash/isEqual';
 
-import Button from 'sentry/components/button';
-import FormContext, {
-  FormContextData,
-} from 'sentry/components/deprecatedforms/formContext';
+import {Button} from 'sentry/components/button';
+import type {FormContextData} from 'sentry/components/deprecatedforms/formContext';
+import FormContext from 'sentry/components/deprecatedforms/formContext';
 import FormState from 'sentry/components/forms/state';
 import {t} from 'sentry/locale';
 
 type FormProps = {
   cancelLabel?: string;
+  children?: React.ReactNode;
   className?: string;
   errorMessage?: React.ReactNode;
   extraButton?: React.ReactNode;
   footerClass?: string;
   hideErrors?: boolean;
-  initialData?: object;
+  initialData?: Record<PropertyKey, unknown>;
   onCancel?: () => void;
   onSubmit?: (
-    data: object,
-    onSubmitSuccess: (data: object) => void,
-    onSubmitError: (error: object) => void
+    data: Record<PropertyKey, unknown>,
+    onSubmitSuccess: (data: Record<PropertyKey, unknown>) => void,
+    onSubmitError: (error: Record<PropertyKey, unknown>) => void
   ) => void;
-  onSubmitError?: (error: object) => void;
-  onSubmitSuccess?: (data: object) => void;
+  onSubmitError?: (error: Record<PropertyKey, unknown>) => void;
+  onSubmitSuccess?: (data: Record<PropertyKey, unknown>) => void;
   requireChanges?: boolean;
   resetOnError?: boolean;
   submitDisabled?: boolean;
@@ -33,8 +33,11 @@ type FormProps = {
 
 type FormClassState = {
   data: any;
-  errors: {non_field_errors?: object[]} & object;
-  initialData: object;
+  errors: {non_field_errors?: Array<Record<PropertyKey, unknown>>} & Record<
+    PropertyKey,
+    string
+  >;
+  initialData: Record<PropertyKey, unknown>;
   state: FormState;
 };
 
@@ -43,7 +46,7 @@ export type Context = FormContextData;
 
 class Form<
   Props extends FormProps = FormProps,
-  State extends FormClassState = FormClassState
+  State extends FormClassState = FormClassState,
 > extends Component<Props, State> {
   static defaultProps = {
     cancelLabel: t('Cancel'),
@@ -88,16 +91,16 @@ class Form<
     this.props.onSubmit(this.state.data, this.onSubmitSuccess, this.onSubmitError);
   };
 
-  onSubmitSuccess = (data: object) => {
+  onSubmitSuccess = (data: Record<PropertyKey, unknown>) => {
     this.setState({
       state: FormState.READY,
       errors: {},
       initialData: {...this.state.data, ...(data || {})},
     });
-    this.props.onSubmitSuccess && this.props.onSubmitSuccess(data);
+    this.props.onSubmitSuccess?.(data);
   };
 
-  onSubmitError = error => {
+  onSubmitError = (error: any) => {
     this.setState({
       state: FormState.ERROR,
       errors: error.responseJSON,
@@ -109,7 +112,7 @@ class Form<
       });
     }
 
-    this.props.onSubmitError && this.props.onSubmitError(error);
+    this.props.onSubmitError?.(error);
   };
 
   onFieldChange = (name: string, value: string | number) => {
@@ -129,11 +132,15 @@ class Form<
       ? Object.keys(data).length && !isEqual(data, initialData)
       : true;
     const isError = this.state.state === FormState.ERROR;
-    const nonFieldErrors = this.state.errors && this.state.errors.non_field_errors;
+    const nonFieldErrors = this.state.errors?.non_field_errors;
 
     return (
       <FormContext.Provider value={this.getContext()}>
-        <StyledForm onSubmit={this.onSubmit} className={this.props.className}>
+        <StyledForm
+          onSubmit={this.onSubmit}
+          className={this.props.className}
+          aria-label={(this.props as any)['aria-label']}
+        >
           {isError && !hideErrors && (
             <div className="alert alert-error alert-block">
               {nonFieldErrors ? (
@@ -145,7 +152,8 @@ class Form<
                   </p>
                   <ul>
                     {nonFieldErrors.map((e, i) => (
-                      <li key={i}>{e}</li>
+                      // TODO(TS): Objects cannot be rendered to dom
+                      <li key={i}>{e as any}</li>
                     ))}
                   </ul>
                 </div>
@@ -166,7 +174,6 @@ class Form<
             </Button>
             {this.props.onCancel && (
               <Button
-                type="button"
                 disabled={isSaving}
                 onClick={this.props.onCancel}
                 style={{marginLeft: 5}}

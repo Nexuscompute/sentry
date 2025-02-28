@@ -1,125 +1,208 @@
-import {Fragment} from 'react';
-import {css} from '@emotion/react';
+import {useCallback, useContext, useEffect, useMemo} from 'react';
+import type {Theme} from '@emotion/react';
+import {css, useTheme} from '@emotion/react';
 import styled from '@emotion/styled';
 
-import OnboardingSidebar from 'sentry/components/onboardingWizard/sidebar';
-import {getMergedTasks} from 'sentry/components/onboardingWizard/taskConfig';
+import GuideAnchor from 'sentry/components/assistant/guideAnchor';
+import {LegacyOnboardingSidebar} from 'sentry/components/onboardingWizard/sidebar';
+import {useOnboardingTasks} from 'sentry/components/onboardingWizard/useOnboardingTasks';
+import {useOverdueDoneTasks} from 'sentry/components/onboardingWizard/useOverdueDoneTasks';
 import ProgressRing, {
   RingBackground,
   RingBar,
   RingText,
 } from 'sentry/components/progressRing';
-import {t, tct} from 'sentry/locale';
-import space from 'sentry/styles/space';
-import {OnboardingTaskStatus, Organization, Project} from 'sentry/types';
-import trackAdvancedAnalyticsEvent from 'sentry/utils/analytics/trackAdvancedAnalyticsEvent';
-import theme, {Theme} from 'sentry/utils/theme';
-import withProjects from 'sentry/utils/withProjects';
-import {usePersistedOnboardingState} from 'sentry/views/onboarding/targetedOnboarding/utils';
+import {ExpandedContext} from 'sentry/components/sidebar/expandedContextProvider';
+import {IconCheckmark} from 'sentry/icons/iconCheckmark';
+import {t, tn} from 'sentry/locale';
+import {space} from 'sentry/styles/space';
+import {trackAnalytics} from 'sentry/utils/analytics';
+import {isDemoModeEnabled} from 'sentry/utils/demoMode';
+import {useLocalStorageState} from 'sentry/utils/useLocalStorageState';
+import useMutateUserOptions from 'sentry/utils/useMutateUserOptions';
+import useOrganization from 'sentry/utils/useOrganization';
+import {useUser} from 'sentry/utils/useUser';
+import {useOnboardingSidebar} from 'sentry/views/onboarding/useOnboardingSidebar';
 
-import {CommonSidebarProps, SidebarPanelKey} from './types';
+import type {CommonSidebarProps} from './types';
+import {SidebarPanelKey} from './types';
 
-type Props = CommonSidebarProps & {
-  org: Organization;
-  projects: Project[];
-};
+type OnboardingStatusProps = CommonSidebarProps;
 
-const isDone = (task: OnboardingTaskStatus) =>
-  task.status === 'complete' || task.status === 'skipped';
-
-const progressTextCss = () => css`
-  font-size: ${theme.fontSizeMedium};
-  font-weight: bold;
-`;
-
-function OnboardingStatus({
+export function OnboardingStatus({
   collapsed,
-  org,
-  projects,
   currentPanel,
   orientation,
   hidePanel,
   onShowPanel,
-}: Props) {
-  const handleShowPanel = () => {
-    trackAdvancedAnalyticsEvent('onboarding.wizard_opened', {organization: org});
-    onShowPanel();
-  };
-  const [onboardingState] = usePersistedOnboardingState();
-
-  if (!org.features?.includes('onboarding')) {
-    return null;
-  }
-
-  const tasks = getMergedTasks({
-    organization: org,
-    projects,
-    onboardingState: onboardingState || undefined,
-  });
-
-  const allDisplayedTasks = tasks
-    .filter(task => task.display)
-    .filter(task => !task.renderCard);
-  const doneTasks = allDisplayedTasks.filter(isDone);
-  const numberRemaining = allDisplayedTasks.length - doneTasks.length;
-
-  const pendingCompletionSeen = doneTasks.some(
-    task =>
-      allDisplayedTasks.some(displayedTask => displayedTask.task === task.task) &&
-      task.status === 'complete' &&
-      !task.completionSeen
+}: OnboardingStatusProps) {
+  const user = useUser();
+  const theme = useTheme();
+  const {mutate: mutateUserOptions} = useMutateUserOptions();
+  const {activateSidebar} = useOnboardingSidebar();
+  const organization = useOrganization();
+  const {shouldAccordionFloat} = useContext(ExpandedContext);
+  const [quickStartCompleted, setQuickStartCompleted] = useLocalStorageState(
+    `quick-start:${organization.slug}:completed`,
+    false
   );
 
-  const isActive = currentPanel === SidebarPanelKey.OnboardingWizard;
+  const isActive = currentPanel === SidebarPanelKey.ONBOARDING_WIZARD;
+  const demoMode = isDemoModeEnabled();
 
-  if (doneTasks.length >= allDisplayedTasks.length && !isActive) {
+  const {
+    allTasks,
+    gettingStartedTasks,
+    beyondBasicsTasks,
+    doneTasks,
+    completeTasks,
+    refetch,
+  } = useOnboardingTasks({
+    disabled: !isActive,
+  });
+
+  const {overdueTasks} = useOverdueDoneTasks({doneTasks});
+
+  const label = demoMode ? t('Guided Tours') : t('Onboarding');
+  const pendingCompletionSeen = doneTasks.length !== completeTasks.length;
+  const allTasksCompleted = allTasks.length === completeTasks.length;
+  const allTasksDone = allTasks.length === doneTasks.length;
+
+  const skipQuickStart =
+    (!demoMode && !organization.features?.includes('onboarding')) ||
+    (allTasksCompleted && !isActive) ||
+    // Skip if all tasks are completed and there are overdue tasks
+    (allTasksDone && overdueTasks.length > 0);
+
+  const orgId = organization.id;
+
+  const quickStartDisplay = useMemo(() => {
+    return user?.options?.quickStartDisplay ?? {};
+  }, [user?.options?.quickStartDisplay]);
+
+  const quickStartDisplayStatus = quickStartDisplay[orgId] ?? 0;
+
+  const handleShowPanel = useCallback(() => {
+    if (!demoMode && !isActive === true) {
+      trackAnalytics('quick_start.opened', {
+        organization,
+        user_clicked: true,
+        source: 'onboarding_sidebar',
+      });
+    }
+
+    onShowPanel();
+  }, [onShowPanel, isActive, demoMode, organization]);
+
+  useEffect(() => {
+    if (!allTasksCompleted || skipQuickStart || quickStartCompleted) {
+      return;
+    }
+
+    if (demoMode) {
+      return;
+    }
+
+    trackAnalytics('quick_start.completed', {
+      organization,
+      referrer: 'onboarding_sidebar',
+    });
+
+    setQuickStartCompleted(true);
+  }, [
+    demoMode,
+    organization,
+    skipQuickStart,
+    quickStartCompleted,
+    setQuickStartCompleted,
+    allTasksCompleted,
+  ]);
+
+  useEffect(() => {
+    if (skipQuickStart || quickStartDisplayStatus > 1 || demoMode) {
+      return;
+    }
+
+    const newQuickStartDisplay = {...quickStartDisplay};
+    newQuickStartDisplay[orgId] = quickStartDisplayStatus + 1;
+
+    mutateUserOptions({['quickStartDisplay']: newQuickStartDisplay});
+
+    if (quickStartDisplayStatus === 1) {
+      activateSidebar({
+        userClicked: false,
+        source: 'onboarding_sidebar_user_second_visit',
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mutateUserOptions, activateSidebar, orgId, skipQuickStart]);
+
+  if (skipQuickStart) {
     return null;
   }
 
-  const label = t('Quick Start');
-
   return (
-    <Fragment>
+    <GuideAnchor target="onboarding_sidebar" position="right">
       <Container
         role="button"
         aria-label={label}
         onClick={handleShowPanel}
         isActive={isActive}
+        showText={!shouldAccordionFloat}
+        onMouseEnter={() => {
+          refetch();
+        }}
       >
         <ProgressRing
-          animateText
-          textCss={progressTextCss}
-          text={allDisplayedTasks.length - doneTasks.length}
-          value={(doneTasks.length / allDisplayedTasks.length) * 100}
+          animate
+          textCss={() => css`
+            font-size: ${theme.fontSizeMedium};
+            font-weight: ${theme.fontWeightBold};
+          `}
+          text={
+            doneTasks.length === allTasks.length ? <IconCheckmark /> : doneTasks.length
+          }
+          value={(doneTasks.length / allTasks.length) * 100}
           backgroundColor="rgba(255, 255, 255, 0.15)"
           progressEndcaps="round"
           size={38}
           barWidth={6}
         />
-        {!collapsed && (
+        {!shouldAccordionFloat && (
           <div>
             <Heading>{label}</Heading>
-            <Remaining>
-              {tct('[numberRemaining] Remaining tasks', {numberRemaining})}
-              {pendingCompletionSeen && <PendingSeenIndicator />}
+            <Remaining role="status">
+              {demoMode
+                ? tn(
+                    '%s remaining tour',
+                    '%s remaining tours',
+                    allTasks.length - doneTasks.length
+                  )
+                : tn('%s completed task', '%s completed tasks', doneTasks.length)}
+              {pendingCompletionSeen && (
+                <PendingSeenIndicator data-test-id="pending-seen-indicator" />
+              )}
             </Remaining>
           </div>
         )}
       </Container>
       {isActive && (
-        <OnboardingSidebar
+        <LegacyOnboardingSidebar
           orientation={orientation}
           collapsed={collapsed}
           onClose={hidePanel}
+          gettingStartedTasks={gettingStartedTasks}
+          beyondBasicsTasks={beyondBasicsTasks}
+          title={label}
         />
       )}
-    </Fragment>
+    </GuideAnchor>
   );
 }
 
 const Heading = styled('div')`
   transition: color 100ms;
-  font-size: ${p => p.theme.backgroundSecondary};
+  font-size: ${p => p.theme.fontSizeLarge};
   color: ${p => p.theme.white};
   margin-bottom: ${space(0.25)};
 `;
@@ -162,11 +245,11 @@ const hoverCss = (p: {theme: Theme}) => css`
   }
 `;
 
-const Container = styled('div')<{isActive: boolean}>`
-  padding: 9px 19px 9px 16px;
+const Container = styled('div')<{isActive: boolean; showText: boolean}>`
+  padding: 9px 16px;
   cursor: pointer;
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: ${p => (p.showText ? 'max-content 1fr' : 'max-content')};
   gap: ${space(1.5)};
   align-items: center;
   transition: background 100ms;
@@ -177,5 +260,3 @@ const Container = styled('div')<{isActive: boolean}>`
     ${hoverCss};
   }
 `;
-
-export default withProjects(OnboardingStatus);

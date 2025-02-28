@@ -1,15 +1,14 @@
+import type {Theme} from '@emotion/react';
 import styled from '@emotion/styled';
-import {LocationDescriptor} from 'history';
+import type {LocationDescriptor} from 'history';
 
-import MenuHeader from 'sentry/components/actions/menuHeader';
+import {Tag} from 'sentry/components/core/badge/tag';
 import ExternalLink from 'sentry/components/links/externalLink';
 import MenuItem from 'sentry/components/menuItem';
-import Tag, {Background} from 'sentry/components/tag';
 import Truncate from 'sentry/components/truncate';
-import space from 'sentry/styles/space';
-import {getDuration} from 'sentry/utils/formatters';
-import {QuickTraceEvent} from 'sentry/utils/performance/quickTrace/types';
-import {Theme} from 'sentry/utils/theme';
+import {space} from 'sentry/styles/space';
+import getDuration from 'sentry/utils/duration/getDuration';
+import type {QuickTraceEvent} from 'sentry/utils/performance/quickTrace/types';
 
 export const SectionSubtext = styled('div')`
   color: ${p => p.theme.subText};
@@ -19,7 +18,6 @@ export const SectionSubtext = styled('div')`
 export const QuickTraceContainer = styled('div')`
   display: flex;
   align-items: center;
-  height: 24px;
 `;
 
 const nodeColors = (theme: Theme) => ({
@@ -29,7 +27,7 @@ const nodeColors = (theme: Theme) => ({
     border: theme.red300,
   },
   warning: {
-    color: theme.red300,
+    color: theme.errorText,
     background: theme.background,
     border: theme.red300,
   },
@@ -45,26 +43,21 @@ const nodeColors = (theme: Theme) => ({
   },
 });
 
-export const EventNode = styled(Tag)<{shouldOffset?: boolean}>`
+export type NodeType = keyof ReturnType<typeof nodeColors>;
+
+export const EventNode = styled(Tag)<{type: NodeType}>`
+  height: 20px;
+  background-color: ${p => nodeColors(p.theme)[p.type || 'white'].background};
+  border: 1px solid ${p => nodeColors(p.theme)[p.type || 'white'].border};
   span {
     display: flex;
     color: ${p => nodeColors(p.theme)[p.type || 'white'].color};
   }
-  & ${/* sc-selector */ Background} {
-    background-color: ${p => nodeColors(p.theme)[p.type || 'white'].background};
-    border: 1px solid ${p => nodeColors(p.theme)[p.type || 'white'].border};
-  }
-
-  /*
-   * When the EventNode is contains an icon, we need to offset the
-   * component a little for all the EventNodes to be aligned.
-   */
-  ${p => p.shouldOffset && `margin-top: ${space(0.5)}`}
 `;
 
-export const TraceConnector = styled('div')`
+export const TraceConnector = styled('div')<{dashed?: boolean}>`
   width: ${space(1)};
-  border-top: 1px solid ${p => p.theme.textColor};
+  border-top: 1px ${p => (p.dashed ? 'dashed' : 'solid')} ${p => p.theme.textColor};
 `;
 
 /**
@@ -79,7 +72,11 @@ export const DropdownContainer = styled('span')`
   }
 `;
 
-export const DropdownMenuHeader = styled(MenuHeader)<{first?: boolean}>`
+export const DropdownMenuHeader = styled(MenuItem)<{first?: boolean}>`
+  text-transform: uppercase;
+  font-weight: ${p => p.theme.fontWeightBold};
+  color: ${p => p.theme.gray400};
+  border-bottom: 1px solid ${p => p.theme.innerBorder};
   background: ${p => p.theme.backgroundSecondary};
   ${p => p.first && 'border-radius: 2px'};
   padding: ${space(1)} ${space(1.5)};
@@ -116,6 +113,7 @@ export function DropdownItem({
 }: DropdownItemProps) {
   return (
     <StyledMenuItem
+      data-test-id="dropdown-item"
       to={to}
       onSelect={onSelect}
       width={width}

@@ -1,24 +1,30 @@
-import {Fragment} from 'react';
+import {Fragment, useCallback, useMemo, useState} from 'react';
 import styled from '@emotion/styled';
 import memoize from 'lodash/memoize';
-import moment from 'moment-timezone';
+import type moment from 'moment-timezone';
 
-import AsyncComponent from 'sentry/components/asyncComponent';
-import Button from 'sentry/components/button';
+import {Button, StyledButton} from 'sentry/components/button';
 import Checkbox from 'sentry/components/checkbox';
-import DateTime from 'sentry/components/dateTime';
-import DropdownButton from 'sentry/components/dropdownButton';
-import DropdownControl, {DropdownItem} from 'sentry/components/dropdownControl';
+import {CompactSelect} from 'sentry/components/compactSelect';
+import {Tag} from 'sentry/components/core/badge/tag';
+import {DateTime} from 'sentry/components/dateTime';
+import EmptyMessage from 'sentry/components/emptyMessage';
 import ExternalLink from 'sentry/components/links/externalLink';
 import LoadingIndicator from 'sentry/components/loadingIndicator';
-import {Panel, PanelBody, PanelHeader, PanelItem} from 'sentry/components/panels';
-import Tag from 'sentry/components/tag';
+import Panel from 'sentry/components/panels/panel';
+import PanelBody from 'sentry/components/panels/panelBody';
+import PanelHeader from 'sentry/components/panels/panelHeader';
+import PanelItem from 'sentry/components/panels/panelItem';
 import {IconChevron, IconFlag, IconOpen} from 'sentry/icons';
 import {t} from 'sentry/locale';
-import space from 'sentry/styles/space';
-import {SentryApp, SentryAppSchemaIssueLink, SentryAppWebhookRequest} from 'sentry/types';
+import {space} from 'sentry/styles/space';
+import type {
+  SentryApp,
+  SentryAppSchemaIssueLink,
+  SentryAppWebhookRequest,
+} from 'sentry/types/integrations';
 import {shouldUse24Hours} from 'sentry/utils/dates';
-import EmptyMessage from 'sentry/views/settings/components/emptyMessage';
+import {type ApiQueryKey, useApiQuery} from 'sentry/utils/queryClient';
 
 const ALL_EVENTS = t('All Events');
 const MAX_PER_PAGE = 10;
@@ -48,7 +54,7 @@ const getEventTypes = memoize((app: SentryApp) => {
   );
   if (issueLinkComponent) {
     issueLinkEvents = ['external_issue.created', 'external_issue.linked'];
-    if (componentHasSelectUri(issueLinkComponent as SentryAppSchemaIssueLink)) {
+    if (componentHasSelectUri(issueLinkComponent)) {
       issueLinkEvents.push('select_options.requested');
     }
   }
@@ -78,7 +84,7 @@ const getEventTypes = memoize((app: SentryApp) => {
   return events;
 });
 
-const ResponseCode = ({code}: {code: number}) => {
+function ResponseCode({code}: {code: number}) {
   let type: React.ComponentProps<typeof Tag>['type'] = 'error';
   if (code <= 399 && code >= 300) {
     type = 'warning';
@@ -91,210 +97,173 @@ const ResponseCode = ({code}: {code: number}) => {
       <StyledTag type={type}>{code === 0 ? 'timeout' : code}</StyledTag>
     </Tags>
   );
-};
+}
 
-const TimestampLink = ({date, link}: {date: moment.MomentInput; link?: string}) =>
-  link ? (
+function TimestampLink({date, link}: {date: moment.MomentInput; link?: string}) {
+  return link ? (
     <ExternalLink href={link}>
       <DateTime date={date} />
-      <StyledIconOpen size="12px" />
+      <StyledIconOpen size="xs" />
     </ExternalLink>
   ) : (
     <DateTime date={date} format={is24Hours ? 'MMM D, YYYY HH:mm:ss z' : 'll LTS z'} />
   );
+}
 
-type Props = AsyncComponent['props'] & {
+interface RequestLogProps {
   app: SentryApp;
-};
+}
 
-type State = AsyncComponent['state'] & {
-  currentPage: number;
-  errorsOnly: boolean;
-  eventType: string;
-  requests: SentryAppWebhookRequest[];
-};
+function makeRequestLogQueryKey(
+  slug: string,
+  query: Record<string, string>
+): ApiQueryKey {
+  return [`/sentry-apps/${slug}/webhook-requests/`, {query}];
+}
 
-export default class RequestLog extends AsyncComponent<Props, State> {
-  shouldReload = true;
+export default function RequestLog({app}: RequestLogProps) {
+  const [currentPage, setCurrentPage] = useState(0);
+  const [errorsOnly, setErrorsOnly] = useState(false);
+  const [eventType, setEventType] = useState(ALL_EVENTS);
 
-  get hasNextPage() {
-    return (this.state.currentPage + 1) * MAX_PER_PAGE < this.state.requests.length;
+  const {slug} = app;
+
+  const query: any = {};
+  if (eventType !== ALL_EVENTS) {
+    query.eventType = eventType;
+  }
+  if (errorsOnly) {
+    query.errorsOnly = true;
   }
 
-  get hasPrevPage() {
-    return this.state.currentPage > 0;
-  }
+  const {
+    data: requests = [],
+    isLoading,
+    refetch,
+  } = useApiQuery<SentryAppWebhookRequest[]>(makeRequestLogQueryKey(slug, query), {
+    staleTime: Infinity,
+  });
 
-  getEndpoints(): ReturnType<AsyncComponent['getEndpoints']> {
-    const {slug} = this.props.app;
+  const currentRequests = useMemo(
+    () => requests.slice(currentPage * MAX_PER_PAGE, (currentPage + 1) * MAX_PER_PAGE),
+    [currentPage, requests]
+  );
 
-    const query: any = {};
-    if (this.state) {
-      if (this.state.eventType !== ALL_EVENTS) {
-        query.eventType = this.state.eventType;
-      }
-      if (this.state.errorsOnly) {
-        query.errorsOnly = true;
-      }
-    }
+  const hasNextPage = useMemo(
+    () => (currentPage + 1) * MAX_PER_PAGE < requests.length,
+    [currentPage, requests]
+  );
 
-    return [['requests', `/sentry-apps/${slug}/requests/`, {query}]];
-  }
+  const hasPrevPage = useMemo(() => currentPage > 0, [currentPage]);
 
-  getDefaultState() {
-    return {
-      ...super.getDefaultState(),
-      requests: [],
-      eventType: ALL_EVENTS,
-      errorsOnly: false,
-      currentPage: 0,
-    };
-  }
+  const handleChangeEventType = useCallback(
+    (newEventType: string) => {
+      setEventType(newEventType);
+      setCurrentPage(0);
+      refetch();
+    },
+    [refetch]
+  );
 
-  handleChangeEventType = (eventType: string) => {
-    this.setState(
-      {
-        eventType,
-        currentPage: 0,
-      },
-      this.remountComponent
-    );
-  };
+  const handleChangeErrorsOnly = useCallback(() => {
+    setErrorsOnly(!errorsOnly);
+    setCurrentPage(0);
+    refetch();
+  }, [errorsOnly, refetch]);
 
-  handleChangeErrorsOnly = () => {
-    this.setState(
-      {
-        errorsOnly: !this.state.errorsOnly,
-        currentPage: 0,
-      },
-      this.remountComponent
-    );
-  };
+  const handleNextPage = useCallback(() => {
+    setCurrentPage(currentPage + 1);
+  }, [currentPage]);
 
-  handleNextPage = () => {
-    this.setState({
-      currentPage: this.state.currentPage + 1,
-    });
-  };
+  const handlePrevPage = useCallback(() => {
+    setCurrentPage(currentPage - 1);
+  }, [currentPage]);
 
-  handlePrevPage = () => {
-    this.setState({
-      currentPage: this.state.currentPage - 1,
-    });
-  };
+  return (
+    <Fragment>
+      <h5>{t('Request Log')}</h5>
 
-  renderLoading() {
-    return this.renderBody();
-  }
-
-  renderBody() {
-    const {requests, eventType, errorsOnly, currentPage} = this.state;
-    const {app} = this.props;
-
-    const currentRequests = requests.slice(
-      currentPage * MAX_PER_PAGE,
-      (currentPage + 1) * MAX_PER_PAGE
-    );
-
-    return (
-      <Fragment>
-        <h5>{t('Request Log')}</h5>
-
-        <div>
-          <p>
-            {t(
-              'This log shows the status of any outgoing webhook requests from Sentry to your integration.'
-            )}
-          </p>
-
-          <RequestLogFilters>
-            <DropdownControl
-              label={eventType}
-              menuWidth="220px"
-              button={({isOpen, getActorProps}) => (
-                <StyledDropdownButton {...getActorProps()} isOpen={isOpen}>
-                  {eventType}
-                </StyledDropdownButton>
-              )}
-            >
-              {getEventTypes(app).map(type => (
-                <DropdownItem
-                  key={type}
-                  onSelect={this.handleChangeEventType}
-                  eventKey={type}
-                  isActive={eventType === type}
-                >
-                  {type}
-                </DropdownItem>
-              ))}
-            </DropdownControl>
-
-            <StyledErrorsOnlyButton onClick={this.handleChangeErrorsOnly}>
-              <ErrorsOnlyCheckbox>
-                <Checkbox checked={errorsOnly} onChange={() => {}} />
-                {t('Errors Only')}
-              </ErrorsOnlyCheckbox>
-            </StyledErrorsOnlyButton>
-          </RequestLogFilters>
-        </div>
-
-        <Panel>
-          <PanelHeader>
-            <TableLayout hasOrganization={app.status !== 'internal'}>
-              <div>{t('Time')}</div>
-              <div>{t('Status Code')}</div>
-              {app.status !== 'internal' && <div>{t('Organization')}</div>}
-              <div>{t('Event Type')}</div>
-              <div>{t('Webhook URL')}</div>
-            </TableLayout>
-          </PanelHeader>
-
-          {!this.state.loading ? (
-            <PanelBody>
-              {currentRequests.length > 0 ? (
-                currentRequests.map((request, idx) => (
-                  <PanelItem key={idx}>
-                    <TableLayout hasOrganization={app.status !== 'internal'}>
-                      <TimestampLink date={request.date} link={request.errorUrl} />
-                      <ResponseCode code={request.responseCode} />
-                      {app.status !== 'internal' && (
-                        <div>
-                          {request.organization ? request.organization.name : null}
-                        </div>
-                      )}
-                      <div>{request.eventType}</div>
-                      <OverflowBox>{request.webhookUrl}</OverflowBox>
-                    </TableLayout>
-                  </PanelItem>
-                ))
-              ) : (
-                <EmptyMessage icon={<IconFlag size="xl" />}>
-                  {t('No requests found in the last 30 days.')}
-                </EmptyMessage>
-              )}
-            </PanelBody>
-          ) : (
-            <LoadingIndicator />
+      <div>
+        <p>
+          {t(
+            'This log shows the status of any outgoing webhook requests from Sentry to your integration.'
           )}
-        </Panel>
+        </p>
 
-        <PaginationButtons>
-          <Button
-            icon={<IconChevron direction="left" size="sm" />}
-            onClick={this.handlePrevPage}
-            disabled={!this.hasPrevPage}
-            aria-label={t('Previous page')}
+        <RequestLogFilters>
+          <CompactSelect
+            triggerLabel={eventType}
+            value={eventType}
+            options={getEventTypes(app).map(type => ({
+              value: type,
+              label: type,
+            }))}
+            onChange={opt => handleChangeEventType(opt?.value)}
           />
-          <Button
-            icon={<IconChevron direction="right" size="sm" />}
-            onClick={this.handleNextPage}
-            disabled={!this.hasNextPage}
-            aria-label={t('Next page')}
-          />
-        </PaginationButtons>
-      </Fragment>
-    );
-  }
+
+          <StyledErrorsOnlyButton onClick={handleChangeErrorsOnly}>
+            <ErrorsOnlyCheckbox>
+              <Checkbox checked={errorsOnly} onChange={() => {}} />
+              {t('Errors Only')}
+            </ErrorsOnlyCheckbox>
+          </StyledErrorsOnlyButton>
+        </RequestLogFilters>
+      </div>
+
+      <Panel>
+        <PanelHeader>
+          <TableLayout hasOrganization={app.status !== 'internal'}>
+            <div>{t('Time')}</div>
+            <div>{t('Status Code')}</div>
+            {app.status !== 'internal' && <div>{t('Organization')}</div>}
+            <div>{t('Event Type')}</div>
+            <div>{t('Webhook URL')}</div>
+          </TableLayout>
+        </PanelHeader>
+
+        {!isLoading ? (
+          <PanelBody>
+            {currentRequests.length > 0 ? (
+              currentRequests.map((request, idx) => (
+                <PanelItem key={idx} data-test-id="request-item">
+                  <TableLayout hasOrganization={app.status !== 'internal'}>
+                    <TimestampLink date={request.date} link={request.errorUrl} />
+                    <ResponseCode code={request.responseCode} />
+                    {app.status !== 'internal' && (
+                      <div>{request.organization ? request.organization.name : null}</div>
+                    )}
+                    <div>{request.eventType}</div>
+                    <OverflowBox>{request.webhookUrl}</OverflowBox>
+                  </TableLayout>
+                </PanelItem>
+              ))
+            ) : (
+              <EmptyMessage icon={<IconFlag size="xl" />}>
+                {t('No requests found in the last 30 days.')}
+              </EmptyMessage>
+            )}
+          </PanelBody>
+        ) : (
+          <LoadingIndicator />
+        )}
+      </Panel>
+
+      <PaginationButtons>
+        <Button
+          icon={<IconChevron direction="left" />}
+          onClick={handlePrevPage}
+          disabled={!hasPrevPage}
+          aria-label={t('Previous page')}
+        />
+        <Button
+          icon={<IconChevron direction="right" />}
+          onClick={handleNextPage}
+          disabled={!hasNextPage}
+          aria-label={t('Next page')}
+        />
+      </PaginationButtons>
+    </Fragment>
+  );
 }
 
 const TableLayout = styled('div')<{hasOrganization: boolean}>`
@@ -330,23 +299,16 @@ const RequestLogFilters = styled('div')`
   display: flex;
   align-items: center;
   padding-bottom: ${space(1)};
+
+  > :first-child ${StyledButton} {
+    border-radius: ${p => p.theme.borderRadius} 0 0 ${p => p.theme.borderRadius};
+  }
 `;
 
 const ErrorsOnlyCheckbox = styled('div')`
-  input {
-    margin: 0 ${space(1)} 0 0;
-  }
-
   display: flex;
+  gap: ${space(1)};
   align-items: center;
-`;
-
-const StyledDropdownButton = styled(DropdownButton)`
-  z-index: ${p => p.theme.zIndex.header - 1};
-  white-space: nowrap;
-
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
 `;
 
 const StyledErrorsOnlyButton = styled(Button)`
@@ -366,5 +328,4 @@ const Tags = styled('div')`
 
 const StyledTag = styled(Tag)`
   padding: ${space(0.5)};
-  display: inline-flex;
 `;

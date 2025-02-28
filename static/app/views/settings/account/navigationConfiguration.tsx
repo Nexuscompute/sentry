@@ -1,7 +1,9 @@
+import {prefersStackedNav} from 'sentry/components/nav/prefersStackedNav';
 import {t} from 'sentry/locale';
 import HookStore from 'sentry/stores/hookStore';
-import {Organization} from 'sentry/types';
-import {NavigationSection} from 'sentry/views/settings/types';
+import type {Organization} from 'sentry/types/organization';
+import {getUserOrgNavigationConfiguration} from 'sentry/views/settings/organization/userOrgNavigationConfiguration';
+import type {NavigationSection} from 'sentry/views/settings/types';
 
 const pathPrefix = '/settings/account';
 
@@ -10,6 +12,10 @@ type ConfigParams = {
 };
 
 function getConfiguration({organization}: ConfigParams): NavigationSection[] {
+  if (organization && prefersStackedNav()) {
+    return getUserOrgNavigationConfiguration({organization});
+  }
+
   return [
     {
       name: t('Account'),
@@ -76,7 +82,7 @@ function getConfiguration({organization}: ConfigParams): NavigationSection[] {
         },
         {
           path: `${pathPrefix}/api/auth-tokens/`,
-          title: t('Auth Tokens'),
+          title: t('User Auth Tokens'),
           description: t(
             "Authentication tokens allow you to perform actions against the Sentry API on behalf of your account. They're the easiest way to get started using the API."
           ),

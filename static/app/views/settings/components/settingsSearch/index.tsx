@@ -1,10 +1,10 @@
-import {useRef} from 'react';
-import {useHotkeys} from 'react-hotkeys-hook';
+import {useMemo, useRef} from 'react';
 import styled from '@emotion/styled';
 
 import {Search} from 'sentry/components/search';
 import {IconSearch} from 'sentry/icons';
 import {t} from 'sentry/locale';
+import {useHotkeys} from 'sentry/utils/useHotkeys';
 
 const MIN_SEARCH_LENGTH = 1;
 const MAX_RESULTS = 10;
@@ -12,10 +12,11 @@ const MAX_RESULTS = 10;
 function SettingsSearch() {
   const searchInput = useRef<HTMLInputElement>(null);
 
-  useHotkeys('/', e => {
-    e.preventDefault();
-    searchInput.current?.focus();
-  });
+  const settingsSearchHotkeys = useMemo(() => {
+    return [{match: '/', callback: () => searchInput.current?.focus()}];
+  }, []);
+
+  useHotkeys(settingsSearchHotkeys);
 
   return (
     <Search
@@ -24,8 +25,9 @@ function SettingsSearch() {
       maxResults={MAX_RESULTS}
       renderInput={({getInputProps}) => (
         <SearchInputWrapper>
-          <SearchInputIcon size="14px" />
+          <SearchInputIcon size="sm" />
           <SearchInput
+            aria-label={t('Search Settings')}
             {...getInputProps({type: 'text', placeholder: t('Search')})}
             ref={searchInput}
           />
@@ -60,7 +62,7 @@ const SearchInput = styled('input')`
   border-radius: 30px;
   height: 28px;
 
-  box-shadow: inset ${p => p.theme.dropShadowLight};
+  box-shadow: inset ${p => p.theme.dropShadowMedium};
 
   &:focus {
     outline: none;

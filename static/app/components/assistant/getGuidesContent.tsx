@@ -1,55 +1,75 @@
-import {GuidesContent} from 'sentry/components/assistant/types';
+import type {GuidesContent} from 'sentry/components/assistant/types';
 import ExternalLink from 'sentry/components/links/externalLink';
 import Link from 'sentry/components/links/link';
 import {t, tct} from 'sentry/locale';
-import ConfigStore from 'sentry/stores/configStore';
+import type {Organization} from 'sentry/types/organization';
+import {isDemoModeEnabled} from 'sentry/utils/demoMode';
+import {getDemoModeGuides} from 'sentry/utils/demoMode/guides';
 
-export default function getGuidesContent(orgSlug: string | null): GuidesContent {
-  if (ConfigStore.get('demoMode')) {
+export default function getGuidesContent(
+  organization: Organization | null
+): GuidesContent {
+  if (isDemoModeEnabled()) {
     return getDemoModeGuides();
   }
   return [
     {
       guide: 'issue',
-      requiredTargets: ['issue_number', 'exception'],
+      requiredTargets: ['issue_header_stats', 'breadcrumbs', 'issue_sidebar_owners'],
       steps: [
         {
-          title: t('Identify Your Issues'),
-          target: 'issue_number',
-          description: tct(
-            `You have Issues. That's fine. Use the Issue number in your commit message,
-                and we'll automatically resolve the Issue when your code is deployed. [link:Learn more]`,
-            {link: <ExternalLink href="https://docs.sentry.io/product/releases/" />}
-          ),
-        },
-        {
-          title: t('Annoy the Right People'),
-          target: 'owners',
-          description: tct(
-            `Notification overload makes it tempting to hurl your phone into the ocean.
-                Define who is responsible for what, so alerts reach the right people and your
-                devices stay on dry land. [link:Learn more]`,
-            {
-              link: (
-                <ExternalLink href="https://docs.sentry.io/product/error-monitoring/issue-owners/" />
-              ),
-            }
-          ),
-        },
-        {
-          title: t('Narrow Down Suspects'),
-          target: 'exception',
+          title: t('How bad is it?'),
+          target: 'issue_header_stats',
           description: t(
-            `We've got stack trace. See the exact sequence of function calls leading to the error
-                in question, no detective skills necessary.`
+            `You have Issues and that's fine.
+              Understand impact at a glance by viewing total issue frequency and affected users.`
+          ),
+        },
+        {
+          title: t('Find problematic releases'),
+          target: 'issue_sidebar_releases',
+          description: t(
+            `See which release introduced the issue and which release it last appeared in.`
+          ),
+        },
+        {
+          title: t('Not your typical stack trace'),
+          target: 'stacktrace',
+          description: t(
+            `Sentry can show your source code in the stack trace.
+              See the exact sequence of function calls leading to the error in question.`
+          ),
+        },
+        {
+          // TODO(streamline-ui): Remove from guides on GA, tag sidebar is gone
+          title: t('Pinpoint hotspots'),
+          target: 'issue_sidebar_tags',
+          description: t(
+            `Tags are key/value string pairs that are automatically indexed and searchable in Sentry.`
           ),
         },
         {
           title: t('Retrace Your Steps'),
           target: 'breadcrumbs',
           description: t(
-            `Not sure how you got here? Sentry automatically captures breadcrumbs for events in web
-                frameworks to lead you straight to your error.`
+            `Not sure how you got here? Sentry automatically captures breadcrumbs for
+              events your user and app took that led to the error.`
+          ),
+        },
+        {
+          title: t('Annoy the Right People'),
+          target: 'issue_sidebar_owners',
+          description: t(
+            `Automatically assign issues to the person who introduced the commit,
+              notify them over notification tools like Slack,
+              and triage through issue management tools like Jira. `
+          ),
+        },
+        {
+          title: t('Onboarding'),
+          target: 'onboarding_sidebar',
+          description: t(
+            'Walk through this guide to get the most out of Sentry right away.'
           ),
         },
       ],
@@ -82,10 +102,14 @@ export default function getGuidesContent(orgSlug: string | null): GuidesContent 
           description: tct(
             `Today only admins in your organization can create alert rules but we recommend [link:allowing members to create alerts], too.`,
             {
-              link: <Link to={orgSlug ? `/settings/${orgSlug}` : `/settings`} />,
+              link: (
+                <Link
+                  to={organization?.slug ? `/settings/${organization.slug}` : `/settings`}
+                />
+              ),
             }
           ),
-          nextText: t(`Allow`),
+          nextText: t('Allow'),
           hasNextGuide: true,
         },
       ],
@@ -102,16 +126,16 @@ export default function getGuidesContent(orgSlug: string | null): GuidesContent 
           ),
         },
         {
-          title: t('Transactions'),
+          title: t('Events'),
           target: 'trace_view_guide_row',
           description: t(
-            `You can quickly see all the transactions in a trace alongside the project, transaction duration, and any related errors.`
+            `You can quickly see errors and transactions in a trace alongside the project, transaction duration and any errors or performance issues related to the transaction.`
           ),
         },
         {
-          title: t('Transactions Details'),
+          title: t('Event Details'),
           target: 'trace_view_guide_row_details',
-          description: t(`Click on any transaction to see more details.`),
+          description: t('Click on any transaction or error row to see more details.'),
         },
       ],
     },
@@ -167,239 +191,36 @@ export default function getGuidesContent(orgSlug: string | null): GuidesContent 
       ],
     },
     {
-      guide: 'semver',
-      requiredTargets: ['releases_search'],
-      dateThreshold: new Date('2021-05-01'),
+      guide: 'crons_backend_insights',
+      requiredTargets: ['crons_backend_insights'],
       steps: [
         {
-          title: t('Filter by Semver'),
-          target: 'releases_search',
+          title: t('Crons are now Alerts'),
+          target: 'crons_backend_insights',
           description: tct(
-            'You can now filter releases by semver. For example: release.version:>14.0 [br] [link:View the docs]',
+            'Crons are now a type of Sentry Alert and can be managed there. The detailed timeline is now here under Insights\u00A0→\u00A0Backend. [link:Learn more].',
             {
-              br: <br />,
               link: (
-                <ExternalLink href="https://docs.sentry.io/product/releases/usage/sorting-filtering/#filtering-releases" />
+                <ExternalLink href="https://docs.sentry.io/product/crons/alerts-backend-insights-migration/" />
               ),
             }
           ),
-          nextText: t('Leave me alone'),
         },
       ],
     },
     {
-      guide: 'new_page_filters',
-      requiredTargets: ['new_page_filter_button'],
-      expectedTargets: ['new_page_filter_pin'],
-      dateThreshold: new Date('2022-04-05'),
+      guide: 'issue_views_page_filters_persistence',
+      requiredTargets: ['issue_views_page_filters_persistence'],
       steps: [
         {
-          title: t('Selection filters here now!'),
-          target: 'new_page_filter_button',
+          title: t('Save Filters to Issue Views'),
+          target: 'issue_views_page_filters_persistence',
           description: t(
-            "Selection filters were at the top of the page. Now they're here. Because this is what's getting filtered. Obvi."
-          ),
-          nextText: t('Sounds Good'),
-        },
-        {
-          title: t('Pin your filters'),
-          target: 'new_page_filter_pin',
-          description: t(
-            "Want to keep the same filters between searches and sessions? Click this button. Don't want to? Don't click this button."
-          ),
-          nextText: t('Got It'),
-        },
-      ],
-    },
-  ];
-}
-
-function getDemoModeGuides(): GuidesContent {
-  return [
-    {
-      guide: 'sidebar',
-      requiredTargets: ['projects', 'issues'],
-      priority: 1, // lower number means higher priority
-      markOthersAsSeen: true,
-      steps: [
-        {
-          title: t('Projects'),
-          target: 'projects',
-          description: t(
-            `Create a project for any type of application you want to monitor.`
-          ),
-        },
-        {
-          title: t('Issues'),
-          target: 'issues',
-          description: t(
-            `Here's a list of what's broken with your application. And everything you need to know to fix it.`
-          ),
-        },
-        {
-          title: t('Performance'),
-          target: 'performance',
-          description: t(
-            `See slow faster. Trace slow-loading pages back to their API calls as well as surface all related errors.`
-          ),
-        },
-        {
-          title: t('Releases'),
-          target: 'releases',
-          description: t(
-            `Track the health of every release, see differences between releases from crash analytics to adoption rates.`
-          ),
-        },
-        {
-          title: t('Discover'),
-          target: 'discover',
-          description: t(
-            `Query and unlock insights into the health of your entire system and get answers to critical business questions all in one place.`
-          ),
-          nextText: t(`Got it`),
-        },
-      ],
-    },
-    {
-      guide: 'issue_stream_v2',
-      requiredTargets: ['issue_stream_title'],
-      steps: [
-        {
-          title: t('Issue'),
-          target: 'issue_stream_title',
-          description: t(
-            `Click here to get a full error report down to the line of code that caused the error.`
+            'We heard your feedback — Issue Views now save project, environment, and time range filters.'
           ),
         },
       ],
-    },
-    {
-      guide: 'issue_v2',
-      requiredTargets: ['issue_details', 'exception'],
-      steps: [
-        {
-          title: t('Details'),
-          target: 'issue_details',
-          description: t(`See the who, what, and where of every error right at the top`),
-        },
-        {
-          title: t('Exception'),
-          target: 'exception',
-          description: t(
-            `Source code right in the stack trace, so you don’t need to find it yourself.`
-          ),
-        },
-        {
-          title: t('Tags'),
-          target: 'tags',
-          description: t(
-            `Tags help you quickly access related events and view the tag distribution for a set of events.`
-          ),
-        },
-        {
-          title: t('Breadcrumbs'),
-          target: 'breadcrumbs',
-          description: t(
-            `Check out the play by play of what your user experienced till they encountered the exception.`
-          ),
-        },
-        {
-          title: t('Discover'),
-          target: 'open_in_discover',
-          description: t(
-            `Uncover trends with Discover — analyze errors by URL, geography, device, browser, etc.`
-          ),
-        },
-      ],
-    },
-    {
-      guide: 'releases',
-      requiredTargets: ['release_version'],
-      steps: [
-        {
-          title: t('Release'),
-          target: 'release_version',
-          description: t(
-            `Click here to easily identify new issues, regressions, and track the health of every release.`
-          ),
-        },
-      ],
-    },
-    {
-      guide: 'release_details',
-      requiredTargets: ['release_chart'],
-      steps: [
-        {
-          title: t('Chart'),
-          target: 'release_chart',
-          description: t(`Click and drag to zoom in on a specific section of the chart.`),
-        },
-        {
-          title: t('Discover'),
-          target: 'release_issues_open_in_discover',
-          description: t(`Analyze these errors by URL, geography, device, browser, etc.`),
-        },
-        {
-          title: t('Discover'),
-          target: 'release_transactions_open_in_discover',
-          description: t(
-            `Analyze these performance issues by URL, geography, device, browser, etc.`
-          ),
-        },
-      ],
-    },
-    {
-      guide: 'discover_landing',
-      requiredTargets: ['discover_landing_header'],
-      steps: [
-        {
-          title: t('Discover'),
-          target: 'discover_landing_header',
-          description: t(
-            `Click into any of the queries below to identify trends in event data.`
-          ),
-        },
-      ],
-    },
-    {
-      guide: 'discover_event_view',
-      requiredTargets: ['create_alert_from_discover'],
-      steps: [
-        {
-          title: t('Create Alert'),
-          target: 'create_alert_from_discover',
-          description: t(
-            `Create an alert based on this query to get notified when an event exceeds user-defined thresholds.`
-          ),
-        },
-        {
-          title: t('Columns'),
-          target: 'columns_header_button',
-          description: t(
-            `There's a whole lot more to... _discover_. View all the query conditions.`
-          ),
-        },
-      ],
-    },
-    {
-      guide: 'transaction_details',
-      requiredTargets: ['span_tree'],
-      steps: [
-        {
-          title: t('Span Tree'),
-          target: 'span_tree',
-          description: t(
-            `Expand the spans to see span details from start date, end date to the operation.`
-          ),
-        },
-        {
-          title: t('Breadcrumbs'),
-          target: 'breadcrumbs',
-          description: t(
-            `Check out the play by play of what your user experienced till they encountered the performance issue.`
-          ),
-        },
-      ],
+      dateThreshold: new Date('2025-02-11'),
     },
   ];
 }

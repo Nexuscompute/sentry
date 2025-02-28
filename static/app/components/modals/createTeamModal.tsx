@@ -1,26 +1,26 @@
 import {Fragment} from 'react';
 
-import {ModalRenderProps} from 'sentry/actionCreators/modal';
+import type {ModalRenderProps} from 'sentry/actionCreators/modal';
 import {createTeam} from 'sentry/actionCreators/teams';
 import CreateTeamForm from 'sentry/components/teams/createTeamForm';
 import {t} from 'sentry/locale';
-import {Organization, Team} from 'sentry/types';
+import type {Organization, Team} from 'sentry/types/organization';
 import useApi from 'sentry/utils/useApi';
 
-type Props = ModalRenderProps & {
+interface Props extends ModalRenderProps {
   organization: Organization;
   onClose?: (team: Team) => void;
-};
+}
 
 function CreateTeamModal({Body, Header, ...props}: Props) {
   const {onClose, closeModal, organization} = props;
   const api = useApi();
 
-  async function handleSubmit(
-    data: {slug: string},
-    onSuccess: Function,
-    onError: Function
-  ) {
+  const handleSubmit: React.ComponentProps<typeof CreateTeamForm>['onSubmit'] = async (
+    data,
+    onSuccess,
+    onError
+  ) => {
     try {
       const team: Team = await createTeam(api, data, {orgId: organization.slug});
 
@@ -30,7 +30,7 @@ function CreateTeamModal({Body, Header, ...props}: Props) {
     } catch (err) {
       onError(err);
     }
-  }
+  };
 
   return (
     <Fragment>

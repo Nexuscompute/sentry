@@ -1,16 +1,20 @@
-import Alert from 'sentry/components/alert';
+import {Alert, type AlertProps} from 'sentry/components/core/alert';
 import {t} from 'sentry/locale';
 
 type Props = {
-  type?: React.ComponentProps<typeof Alert>['type'];
+  type?: AlertProps['type'];
 };
 
-const PreviewFeature = ({type = 'info'}: Props) => (
-  <Alert type={type} showIcon>
-    {t(
-      'This feature is a preview and may change in the future. Thanks for being an early adopter!'
-    )}
-  </Alert>
-);
+function PreviewFeature({type = 'info'}: Props) {
+  return (
+    <Alert.Container>
+      <Alert type={type} showIcon>
+        {t(
+          'This feature is a preview and may change in the future. Thanks for being an early adopter!'
+        )}
+      </Alert>
+    </Alert.Container>
+  );
+}
 
 export default PreviewFeature;

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, Type
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
+from django.http.request import HttpRequest
 from django.http.response import HttpResponseBase
-from rest_framework.request import Request
 
 from sentry.pipeline.views.base import PipelineView
 
@@ -24,7 +25,7 @@ class NestedPipelineView(PipelineView):
     def __init__(
         self,
         bind_key: str,
-        pipeline_cls: Type[Pipeline],
+        pipeline_cls: type[Pipeline],
         provider_key: str,
         config: Mapping[str, Any] | None = None,
     ) -> None:
@@ -32,7 +33,7 @@ class NestedPipelineView(PipelineView):
         self.provider_key = provider_key
         self.config = config or {}
 
-        class NestedPipeline(pipeline_cls):  # type: ignore
+        class NestedPipeline(pipeline_cls):  # type: ignore[misc, valid-type]
             def set_parent_pipeline(self, parent_pipeline: Pipeline) -> None:
                 self.parent_pipeline = parent_pipeline
 
@@ -44,7 +45,7 @@ class NestedPipelineView(PipelineView):
 
         self.pipeline_cls = NestedPipeline
 
-    def dispatch(self, request: Request, pipeline: Pipeline) -> HttpResponseBase:
+    def dispatch(self, request: HttpRequest, pipeline: Pipeline) -> HttpResponseBase:
         nested_pipeline = self.pipeline_cls(
             organization=pipeline.organization,
             request=request,

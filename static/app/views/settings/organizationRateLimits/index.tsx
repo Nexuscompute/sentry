@@ -1,9 +1,20 @@
 import withOrganization from 'sentry/utils/withOrganization';
+import {OrganizationPermissionAlert} from 'sentry/views/settings/organization/organizationPermissionAlert';
 
 import OrganizationRateLimits from './organizationRateLimits';
 
-const OrganizationRateLimitsContainer = (
+function OrganizationRateLimitsContainer(
   props: React.ComponentProps<typeof OrganizationRateLimits>
-) => (!props.organization ? null : <OrganizationRateLimits {...props} />);
+) {
+  if (!props.organization) {
+    return null;
+  }
+
+  return props.organization.access.includes('org:write') ? (
+    <OrganizationRateLimits {...props} />
+  ) : (
+    <OrganizationPermissionAlert />
+  );
+}
 
 export default withOrganization(OrganizationRateLimitsContainer);

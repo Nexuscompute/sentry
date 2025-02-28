@@ -1,18 +1,17 @@
 import {Component} from 'react';
-import {RouteComponentProps} from 'react-router';
 import styled from '@emotion/styled';
-import isString from 'lodash/isString';
 
-import {Client, ResponseMeta} from 'sentry/api';
-import Alert from 'sentry/components/alert';
+import type {Client, ResponseMeta} from 'sentry/api';
+import {Alert} from 'sentry/components/core/alert';
 import LoadingError from 'sentry/components/loadingError';
 import LoadingIndicator from 'sentry/components/loadingIndicator';
+import Redirect from 'sentry/components/redirect';
 import {t} from 'sentry/locale';
-import space from 'sentry/styles/space';
-import {Project} from 'sentry/types';
-import {analytics} from 'sentry/utils/analytics';
+import {space} from 'sentry/styles/space';
+import type {RouteComponentProps} from 'sentry/types/legacyReactRouter';
+import type {Project} from 'sentry/types/project';
+import {trackAnalytics} from 'sentry/utils/analytics';
 import getRouteStringFromRoutes from 'sentry/utils/getRouteStringFromRoutes';
-import Redirect from 'sentry/utils/redirect';
 import withApi from 'sentry/utils/withApi';
 
 type DetailsProps = {
@@ -81,7 +80,7 @@ class ProjectDetailsInner extends Component<DetailsProps, DetailsState> {
 
   hasProjectId() {
     const projectID = this.getProjectId();
-    return isString(projectID) && projectID.length > 0;
+    return typeof projectID === 'string' && projectID.length > 0;
   }
 
   getOrganizationId() {
@@ -107,7 +106,7 @@ const ProjectDetails = withApi(ProjectDetailsInner);
 
 type Params = {orgId: string; projectId: string} & Record<string, any>;
 
-type Props = RouteComponentProps<Params, {}>;
+type Props = RouteComponentProps<Params>;
 
 type RedirectOptions = {
   orgId: string;
@@ -119,21 +118,19 @@ type RedirectOptions = {
 
 type RedirectCallback = (options: RedirectOptions) => string;
 
-const redirectDeprecatedProjectRoute =
-  (generateRedirectRoute: RedirectCallback) =>
-  ({params, router, routes}: Props) => {
+const redirectDeprecatedProjectRoute = (generateRedirectRoute: RedirectCallback) =>
+  function ({params, router, routes}: Props) {
     // TODO(epurkhiser): The way this function get's called as a side-effect of
     // the render is pretty janky and incorrect... we should fix it.
     function trackRedirect(organizationId: string, nextRoute: string) {
       const payload = {
         feature: 'global_views',
         url: getRouteStringFromRoutes(routes), // the URL being redirected from
-        org_id: parseInt(organizationId, 10),
+        organization: organizationId,
       };
 
       // track redirects of deprecated URLs for analytics
-      analytics('deprecated_urls.redirect', payload);
-
+      trackAnalytics('deprecated_urls.redirect', payload);
       return nextRoute;
     }
 
@@ -150,9 +147,11 @@ const redirectDeprecatedProjectRoute =
             if (!hasProjectId || !organizationId) {
               if (error && error.status === 404) {
                 return (
-                  <Alert type="error">
-                    {t('The project you were looking for was not found.')}
-                  </Alert>
+                  <Alert.Container>
+                    <Alert type="error">
+                      {t('The project you were looking for was not found.')}
+                    </Alert>
+                  </Alert.Container>
                 );
               }
 

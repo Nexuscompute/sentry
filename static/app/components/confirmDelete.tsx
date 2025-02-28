@@ -1,43 +1,48 @@
 import {Fragment} from 'react';
 
-import Alert from 'sentry/components/alert';
 import Confirm from 'sentry/components/confirm';
-import Input from 'sentry/components/forms/controls/input';
-import Field from 'sentry/components/forms/field';
+import {Alert} from 'sentry/components/core/alert';
+import {Input} from 'sentry/components/core/input';
+import FieldGroup from 'sentry/components/forms/fieldGroup';
 import {t} from 'sentry/locale';
 
-type Props = Omit<React.ComponentProps<typeof Confirm>, 'renderConfirmMessage'> & {
+interface Props
+  extends Omit<React.ComponentProps<typeof Confirm>, 'renderConfirmMessage'> {
   /**
    * The string that the user must enter to confirm the deletion
    */
   confirmInput: string;
-};
+}
 
-const ConfirmDelete = ({message, confirmInput, ...props}: Props) => (
-  <Confirm
-    {...props}
-    bypass={false}
-    disableConfirmButton
-    renderMessage={({disableConfirmButton}) => (
-      <Fragment>
-        <Alert type="error">{message}</Alert>
-        <Field
-          flexibleControlStateSize
-          inline={false}
-          label={t(
-            'Please enter %s to confirm the deletion',
-            <code>{confirmInput}</code>
-          )}
-        >
-          <Input
-            type="text"
-            placeholder={confirmInput}
-            onChange={e => disableConfirmButton(e.target.value !== confirmInput)}
-          />
-        </Field>
-      </Fragment>
-    )}
-  />
-);
+function ConfirmDelete({message, confirmInput, ...props}: Props) {
+  return (
+    <Confirm
+      {...props}
+      bypass={false}
+      disableConfirmButton
+      renderMessage={({disableConfirmButton}) => (
+        <Fragment>
+          <Alert.Container>
+            <Alert type="error">{message}</Alert>
+          </Alert.Container>
+          <FieldGroup
+            flexibleControlStateSize
+            inline={false}
+            label={t(
+              'Please enter %s to confirm the deletion',
+              <code>{confirmInput}</code>
+            )}
+          >
+            <Input
+              type="text"
+              placeholder={confirmInput}
+              onChange={e => disableConfirmButton(e.target.value !== confirmInput)}
+            />
+          </FieldGroup>
+        </Fragment>
+      )}
+    />
+  );
+}
 
 export default ConfirmDelete;

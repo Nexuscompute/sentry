@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 
-from sentry.models import Model, Organization
+from sentry.db.models.base import Model
+from sentry.organizations.services.organization import RpcOrganization
 
 from .store import PipelineSessionStore
 
@@ -10,8 +13,8 @@ class PipelineRequestState:
     """Initial pipeline attributes from a request."""
 
     state: PipelineSessionStore
-    provider_model: Model
-    organization: Organization
+    provider_model: Model | None
+    organization: RpcOrganization | None
     provider_key: str
 
 

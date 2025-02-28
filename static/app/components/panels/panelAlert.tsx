@@ -1,11 +1,15 @@
 import styled from '@emotion/styled';
 
-import Alert from 'sentry/components/alert';
-
-type Props = React.ComponentProps<typeof Alert>;
+import type {AlertProps} from 'sentry/components/core/alert';
+import {Alert} from 'sentry/components/core/alert';
 
 // Margin bottom should probably be a different prop
-const PanelAlert = styled(({...props}: Props) => <Alert {...props} showIcon system />)`
+// @TODO(jonasbadalic): What is a panel alert, how does it differ from an alert and why do we need it?
+const PanelAlert = styled(({...props}: AlertProps) => (
+  <Alert.Container>
+    <Alert {...props} showIcon system />
+  </Alert.Container>
+))`
   margin: 0 0 1px 0;
   border-radius: 0;
   box-shadow: none;

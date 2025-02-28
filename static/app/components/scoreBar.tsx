@@ -1,11 +1,11 @@
 import styled from '@emotion/styled';
 
-import theme from 'sentry/utils/theme';
+import {SIMILARITY_SCORE_COLORS} from './similarScoreCard';
 
 type Props = {
   score: number;
   className?: string;
-  palette?: Readonly<string[]>;
+  palette?: readonly string[];
   paletteClassNames?: string[];
   radius?: number;
   size?: number;
@@ -13,15 +13,16 @@ type Props = {
   vertical?: boolean;
 };
 
-const BaseScoreBar = ({
+function BaseScoreBar({
   score,
   className,
   vertical,
   size = 40,
   thickness = 4,
   radius = 3,
-  palette = theme.similarity.colors,
-}: Props) => {
+  palette = SIMILARITY_SCORE_COLORS,
+  ...props
+}: Props) {
   const maxScore = palette.length;
 
   // Make sure score is between 0 and maxScore
@@ -38,7 +39,7 @@ const BaseScoreBar = ({
   };
 
   return (
-    <div className={className}>
+    <div className={className} {...props}>
       {[...Array(scoreInBounds)].map((_j, i) => (
         <Bar {...barProps} key={i} color={palette[paletteIndex]} />
       ))}
@@ -47,7 +48,7 @@ const BaseScoreBar = ({
       ))}
     </div>
   );
-};
+}
 
 const ScoreBar = styled(BaseScoreBar)`
   display: flex;
@@ -71,8 +72,9 @@ type BarProps = {
 const Bar = styled('div')<BarProps>`
   border-radius: ${p => p.radius}px;
   margin: 2px;
-  ${p => p.empty && `background-color: ${p.theme.similarity.empty};`};
-  ${p => p.color && `background-color: ${p.color};`};
+  /* @TODO(jonasbadalic) This used to be defined on the theme, but is component specific and had no dark mode color. */
+  ${p => p.empty && `background-color: #e2dee6;`}
+  ${p => p.color && `background-color: ${p.color};`}
 
   width: ${p => (!p.vertical ? p.thickness : p.size)}px;
   height: ${p => (!p.vertical ? p.size : p.thickness)}px;

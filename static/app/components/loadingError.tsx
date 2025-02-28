@@ -1,8 +1,5 @@
-import styled from '@emotion/styled';
-
-import Alert from 'sentry/components/alert';
-import Button from 'sentry/components/button';
-import {Panel} from 'sentry/components/panels';
+import {Button} from 'sentry/components/button';
+import {Alert} from 'sentry/components/core/alert';
 import {t} from 'sentry/locale';
 
 type Props = {
@@ -21,28 +18,24 @@ function LoadingError({
   message = t('There was an error loading data.'),
 }: Props) {
   return (
-    <StyledAlert
-      type="error"
-      showIcon
-      className={className}
-      trailingItems={
-        onRetry && (
-          <Button onClick={onRetry} type="button" priority="default" size="small">
-            {t('Retry')}
-          </Button>
-        )
-      }
-    >
-      {message}
-    </StyledAlert>
+    <Alert.Container>
+      <Alert
+        type="error"
+        data-test-id="loading-error"
+        showIcon
+        className={className}
+        trailingItems={
+          onRetry && (
+            <Button onClick={onRetry} priority="default" size="sm">
+              {t('Retry')}
+            </Button>
+          )
+        }
+      >
+        {message}
+      </Alert>
+    </Alert.Container>
   );
 }
 
 export default LoadingError;
-
-const StyledAlert = styled(Alert)`
-  ${/* sc-selector */ Panel} & {
-    border-radius: 0;
-    border-width: 1px 0;
-  }
-`;

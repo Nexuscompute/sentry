@@ -1,8 +1,12 @@
 import type {LinkProps} from 'sentry/components/links/link';
 import {t} from 'sentry/locale';
-import {Project} from 'sentry/types';
+import type {Organization} from 'sentry/types/organization';
+import type {Project} from 'sentry/types/project';
+import type {DiscoverDatasets, SavedQueryDatasets} from 'sentry/utils/discover/types';
 import {DisplayModes} from 'sentry/utils/discover/types';
-import {MetricRule} from 'sentry/views/alerts/rules/metric/types';
+import type {TimePeriodType} from 'sentry/views/alerts/rules/metric/details/constants';
+import {Dataset, type MetricRule} from 'sentry/views/alerts/rules/metric/types';
+import {getAlertRuleExploreUrl} from 'sentry/views/alerts/rules/utils';
 import {getMetricRuleDiscoverUrl} from 'sentry/views/alerts/utils/getMetricRuleDiscoverUrl';
 
 interface PresetCta {
@@ -14,33 +18,29 @@ interface PresetCta {
    * The location to direct to upon clicking the CTA.
    */
   to: LinkProps['to'];
-  /**
-   * The tooltip title for the CTA button, may be empty.
-   */
-  title?: string;
 }
 
 interface PresetCtaOpts {
-  orgSlug: string;
+  organization: Organization;
   projects: Project[];
-  end?: string;
-  eventType?: string;
-  fields?: string[];
+  timePeriod: TimePeriodType;
+  dataset?: DiscoverDatasets;
+  openInDiscoverDataset?: SavedQueryDatasets;
+  query?: string;
   rule?: MetricRule;
-  start?: string;
 }
 
 /**
  * Get the CTA used for alert rules that do not have a preset
  */
 export function makeDefaultCta({
-  orgSlug,
+  organization,
   projects,
   rule,
-  eventType,
-  start,
-  end,
-  fields,
+  timePeriod,
+  query,
+  dataset,
+  openInDiscoverDataset,
 }: PresetCtaOpts): PresetCta {
   if (!rule) {
     return {
@@ -48,23 +48,33 @@ export function makeDefaultCta({
       to: '',
     };
   }
+  if (rule.dataset === Dataset.EVENTS_ANALYTICS_PLATFORM) {
+    return {
+      buttonText: t('Open in Explore'),
+      to: getAlertRuleExploreUrl({
+        rule,
+        organization,
+        period: timePeriod.period,
+        projectId: projects[0]!.id,
+      }),
+    };
+  }
 
   const extraQueryParams = {
-    display: DisplayModes.TOP5,
+    display: DisplayModes.DEFAULT,
+    dataset,
   };
 
   return {
     buttonText: t('Open in Discover'),
     to: getMetricRuleDiscoverUrl({
-      orgSlug,
+      organization,
       projects,
-      environment: rule.environment,
       rule,
-      eventType,
-      start,
-      end,
+      timePeriod,
+      query,
       extraQueryParams,
-      fields,
+      openInDiscoverDataset,
     }),
   };
 }

@@ -1,5 +1,4 @@
 import {useCallback, useEffect, useMemo} from 'react';
-import {withRouter, WithRouterProps} from 'react-router';
 import styled from '@emotion/styled';
 import debounce from 'lodash/debounce';
 
@@ -12,11 +11,13 @@ import CommandSource from 'sentry/components/search/sources/commandSource';
 import FormSource from 'sentry/components/search/sources/formSource';
 import RouteSource from 'sentry/components/search/sources/routeSource';
 import {t} from 'sentry/locale';
-import trackAdvancedAnalyticsEvent from 'sentry/utils/analytics/trackAdvancedAnalyticsEvent';
+import {trackAnalytics} from 'sentry/utils/analytics';
 import type {Fuse} from 'sentry/utils/fuzzySearch';
 import replaceRouterParams from 'sentry/utils/replaceRouterParams';
+import {useParams} from 'sentry/utils/useParams';
+import useRouter from 'sentry/utils/useRouter';
 
-import {Result} from './sources/types';
+import type {Result} from './sources/types';
 import List from './list';
 
 type AutoCompleteOpts = Parameters<AutoComplete<Result['item']>['props']['children']>[0];
@@ -25,7 +26,7 @@ type ListProps = React.ComponentProps<typeof List>;
 
 interface InputProps extends Pick<AutoCompleteOpts, 'getInputProps'> {}
 
-interface SearchProps extends WithRouterProps<{orgId: string}> {
+interface SearchProps {
   /**
    * For analytics
    */
@@ -66,7 +67,7 @@ interface SearchProps extends WithRouterProps<{orgId: string}> {
    * The sources to query
    */
   // TODO(ts): Improve any type here
-  sources?: React.ComponentType<any>[];
+  sources?: Array<React.ComponentType<any>>;
 }
 
 function Search({
@@ -80,22 +81,23 @@ function Search({
   resultFooter,
   searchOptions,
   sources,
-  router,
-  params,
 }: SearchProps): React.ReactElement {
+  const router = useRouter();
+
+  const params = useParams<{orgId: string}>();
   useEffect(() => {
-    trackAdvancedAnalyticsEvent(`${entryPoint}.open`, {
+    trackAnalytics(`${entryPoint}.open`, {
       organization: null,
     });
   }, [entryPoint]);
 
   const handleSelectItem = useCallback(
-    (item: Result['item'], state?: AutoComplete<Result['item']>['state']) => {
+    (item: Readonly<Result['item']>, state?: AutoComplete<Result['item']>['state']) => {
       if (!item) {
         return;
       }
 
-      trackAdvancedAnalyticsEvent(`${entryPoint}.select`, {
+      trackAnalytics(`${entryPoint}.select`, {
         query: state?.inputValue,
         result_type: item.resultType,
         source_type: item.sourceType,
@@ -113,12 +115,14 @@ function Search({
         return;
       }
 
-      if (item.to.startsWith('http')) {
+      const pathname = typeof item.to === 'string' ? item.to : item.to.pathname;
+      if (pathname.startsWith('http')) {
         const open = window.open();
 
         if (open) {
           open.opener = null;
-          open.location.href = item.to;
+          // `to` is a full URL when starting with http
+          open.location.href = item.to as string;
           return;
         }
 
@@ -128,9 +132,14 @@ function Search({
         return;
       }
 
-      const nextPath = replaceRouterParams(item.to, params);
-
-      navigateTo(nextPath, router, item.configUrl);
+      const nextTo =
+        typeof item.to === 'string'
+          ? replaceRouterParams(item.to, params)
+          : {
+              ...item.to,
+              pathname: replaceRouterParams(item.to.pathname, params),
+            };
+      navigateTo(nextTo, router, item.configUrl);
     },
     [entryPoint, router, params]
   );
@@ -141,7 +150,7 @@ function Search({
         return;
       }
 
-      trackAdvancedAnalyticsEvent(`${entryPoint}.query`, {
+      trackAnalytics(`${entryPoint}.query`, {
         query,
         organization: null,
       });
@@ -159,6 +168,7 @@ function Search({
       defaultHighlightedIndex={0}
       onSelect={handleSelectItem}
       closeOnSelect={closeOnSelect ?? true}
+      isOpen
     >
       {({getInputProps, isOpen, inputValue, ...autocompleteProps}) => {
         const searchQuery = inputValue.toLowerCase().trim();
@@ -167,7 +177,7 @@ function Search({
         debouncedSaveQueryMetrics(searchQuery);
 
         return (
-          <SearchWrapper>
+          <SearchWrapper role="search">
             {renderInput({getInputProps})}
 
             {isValidSearch && isOpen ? (
@@ -175,15 +185,7 @@ function Search({
                 searchOptions={searchOptions}
                 query={searchQuery}
                 params={params}
-                sources={
-                  sources ??
-                  ([
-                    ApiSource,
-                    FormSource,
-                    RouteSource,
-                    CommandSource,
-                  ] as React.ComponentType[])
-                }
+                sources={sources ?? [ApiSource, FormSource, RouteSource, CommandSource]}
               >
                 {({isLoading, results, hasAnyResults}) => (
                   <List
@@ -208,8 +210,8 @@ function Search({
   );
 }
 
-const WithRouterSearch = withRouter(Search);
-export {WithRouterSearch as Search, SearchProps};
+export type {SearchProps};
+export {Search};
 
 const SearchWrapper = styled('div')`
   position: relative;

@@ -1,25 +1,27 @@
-import {Component, Fragment} from 'react';
-import {Link} from 'react-router';
+import {Fragment} from 'react';
 import {css} from '@emotion/react';
 import styled from '@emotion/styled';
 
-import {ModalRenderProps} from 'sentry/actionCreators/modal';
-import {Client} from 'sentry/api';
-import Button from 'sentry/components/button';
-import Input from 'sentry/components/forms/controls/input';
+import type {ModalRenderProps} from 'sentry/actionCreators/modal';
+import type {Client} from 'sentry/api';
+import {Button} from 'sentry/components/button';
+import {Input} from 'sentry/components/core/input';
+import Link from 'sentry/components/links/link';
 import {IconChevron, IconSearch} from 'sentry/icons';
 import {t} from 'sentry/locale';
-import space from 'sentry/styles/space';
-import {Organization, PageFilters} from 'sentry/types';
-import trackAdvancedAnalyticsEvent from 'sentry/utils/analytics/trackAdvancedAnalyticsEvent';
+import {space} from 'sentry/styles/space';
+import type {PageFilters} from 'sentry/types/core';
+import type {Organization} from 'sentry/types/organization';
+import {trackAnalytics} from 'sentry/utils/analytics';
 import withApi from 'sentry/utils/withApi';
 import withPageFilters from 'sentry/utils/withPageFilters';
-import {Widget} from 'sentry/views/dashboardsV2/types';
-import {getWidgetDiscoverUrl} from 'sentry/views/dashboardsV2/utils';
+import type {Widget} from 'sentry/views/dashboards/types';
+import {getWidgetDiscoverUrl} from 'sentry/views/dashboards/utils';
 
 export type DashboardWidgetQuerySelectorModalOptions = {
   organization: Organization;
   widget: Widget;
+  isMetricsData?: boolean;
 };
 
 type Props = ModalRenderProps &
@@ -29,9 +31,10 @@ type Props = ModalRenderProps &
     selection: PageFilters;
   };
 
-class DashboardWidgetQuerySelectorModal extends Component<Props> {
-  renderQueries() {
-    const {organization, widget, selection} = this.props;
+function DashboardWidgetQuerySelectorModal(props: Props) {
+  const {organization, widget, selection, isMetricsData, Body, Header} = props;
+
+  const renderQueries = () => {
     const querySearchBars = widget.queries.map((query, index) => {
       const discoverLocation = getWidgetDiscoverUrl(
         {
@@ -39,7 +42,9 @@ class DashboardWidgetQuerySelectorModal extends Component<Props> {
           queries: [query],
         },
         selection,
-        organization
+        organization,
+        0,
+        isMetricsData
       );
       return (
         <Fragment key={index}>
@@ -55,13 +60,10 @@ class DashboardWidgetQuerySelectorModal extends Component<Props> {
                 priority="primary"
                 icon={<IconChevron size="xs" direction="right" />}
                 onClick={() => {
-                  trackAdvancedAnalyticsEvent(
-                    'dashboards_views.query_selector.selected',
-                    {
-                      organization,
-                      widget_type: widget.displayType,
-                    }
-                  );
+                  trackAnalytics('dashboards_views.query_selector.selected', {
+                    organization,
+                    widget_type: widget.displayType,
+                  });
                 }}
                 aria-label={t('Open in Discover')}
               />
@@ -71,26 +73,23 @@ class DashboardWidgetQuerySelectorModal extends Component<Props> {
       );
     });
     return querySearchBars;
-  }
+  };
 
-  render() {
-    const {Body, Header, widget} = this.props;
-    return (
-      <Fragment>
-        <Header closeButton>
-          <h4>{widget.title}</h4>
-        </Header>
-        <Body>
-          <p>
-            {t(
-              'Multiple queries were used to create this widget visualization. Which query would you like to view in Discover?'
-            )}
-          </p>
-          {this.renderQueries()}
-        </Body>
-      </Fragment>
-    );
-  }
+  return (
+    <Fragment>
+      <Header closeButton>
+        <h4>{widget.title}</h4>
+      </Header>
+      <Body>
+        <p>
+          {t(
+            'Multiple queries were used to create this widget visualization. Which query would you like to view in Discover?'
+          )}
+        </p>
+        {renderQueries()}
+      </Body>
+    </Fragment>
+  );
 }
 
 const StyledInput = styled(Input)`
@@ -113,7 +112,7 @@ const OpenInDiscoverButton = styled(Button)`
 
 const Container = styled('div')`
   border: 1px solid ${p => p.theme.border};
-  box-shadow: inset ${p => p.theme.dropShadowLight};
+  box-shadow: inset ${p => p.theme.dropShadowMedium};
   background: ${p => p.theme.backgroundSecondary};
   padding: 7px ${space(1)};
   position: relative;

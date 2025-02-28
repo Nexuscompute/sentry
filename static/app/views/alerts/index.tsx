@@ -1,5 +1,8 @@
-import {cloneElement, Fragment, isValidElement} from 'react';
+import {cloneElement, isValidElement} from 'react';
 
+import {useRedirectNavV2Routes} from 'sentry/components/nav/useRedirectNavV2Routes';
+import NoProjectMessage from 'sentry/components/noProjectMessage';
+import Redirect from 'sentry/components/redirect';
 import useOrganization from 'sentry/utils/useOrganization';
 
 type Props = {
@@ -10,15 +13,28 @@ function AlertsContainer({children}: Props) {
   const organization = useOrganization();
   const hasMetricAlerts = organization.features.includes('incidents');
 
+  // Uptime alerts are not behind a feature flag at the moment
+  const hasUptimeAlerts = true;
+
   const content =
     children && isValidElement(children)
-      ? cloneElement(children, {
+      ? cloneElement<any>(children, {
           organization,
           hasMetricAlerts,
+          hasUptimeAlerts,
         })
       : children;
 
-  return <Fragment>{content}</Fragment>;
+  const redirectPath = useRedirectNavV2Routes({
+    oldPathPrefix: '/alerts/',
+    newPathPrefix: '/issues/alerts/',
+  });
+
+  if (redirectPath) {
+    return <Redirect to={redirectPath} />;
+  }
+
+  return <NoProjectMessage organization={organization}>{content}</NoProjectMessage>;
 }
 
 export default AlertsContainer;
